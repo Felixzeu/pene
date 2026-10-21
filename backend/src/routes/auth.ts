@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes } from 'crypto';
 import { config } from '../config';
 import { saveToken } from '../lib/tokens';
 import { AppError, ERR } from '../lib/errors';
@@ -9,7 +9,7 @@ import { AppError, ERR } from '../lib/errors';
 
 type Provider = 'youtube' | 'instagram' | 'facebook' | 'tiktok';
 
-// Stato anti-CSRF + PKCE per TikTok, in memoria (sessioni di 10 minuti).
+// Stato anti-CSRF in memoria (sessioni di 10 minuti).
 const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number }>();
 setInterval(() => {
   const now = Date.now();
@@ -18,7 +18,6 @@ setInterval(() => {
 
 export const authRouter = Router();
 
-const BASE64URL = (b: Buffer) => b.toString('base64url');
 
 const page = (msg: string) =>
   `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;background:#0B0A0E;color:#F5F3EE;display:grid;place-items:center;height:100vh;margin:0;padding:24px;text-align:center"><h2>${msg}</h2></body></html>`;
@@ -61,14 +60,15 @@ authRouter.get('/:provider', (req, res) => {
   }
 
   if (provider === 'tiktok') {
-    // PKCE obbligatorio per TikTok.
-    const verifier = BASE64URL(randomBytes(32));
-    const challenge = BASE64URL(createHash('sha256').update(verifier).digest());
-    pending.set(state, { provider, verifier, createdAt: Date.now() });
+    // App "Web" di TikTok: niente PKCE (è solo per app desktop/mobile, e con un
+    // code_challenge non atteso TikTok mostra "Page not available"). Basta il client_secret.
+    pending.set(state, { provider, createdAt: Date.now() });
     const url = 'https://www.tiktok.com/v2/auth/authorize/' +
-      `?client_key=${o.tiktok.clientKey}&redirect_uri=${encodeURIComponent(o.tiktok.redirect)}` +
-      `&scope=${encodeURIComponent(o.tiktok.scope)}&state=${state}` +
-      '&response_type=code&code_challenge=' + challenge + '&code_challenge_method=S256';
+      `?client_key=${encodeURIComponent(o.tiktok.clientKey)}&response_type=code` +
+      `&scope=${encodeURIComponent(o.tiktok.scope)}` +
+      `&redirect_uri=${encodeURIComponent(o.tiktok.redirect)}&state=${state}`;
+    // Utile per confrontare il redirect_uri con quello registrato su developers.tiktok.com.
+    console.log(`[auth] TikTok: redirect_uri=${o.tiktok.redirect} scope=${o.tiktok.scope}`);
     res.redirect(url);
     return;
   }
@@ -128,7 +128,6 @@ export async function exchangeCode(provider: Provider, code: string): Promise<vo
       client_secret: o.tiktok.clientSecret,
       redirect_uri: o.tiktok.redirect,
       grant_type: 'authorization_code',
-      code_verifier: '', // riempito dal caller tramite pending
     }),
   });
   const d = (await r.json()) as { data?: { access_token?: string; refresh_token?: string } };

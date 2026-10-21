@@ -40,7 +40,8 @@ export const config = {
       clientKey: process.env.TIKTOK_CLIENT_KEY ?? '',
       clientSecret: process.env.TIKTOK_CLIENT_SECRET ?? '',
       redirect: `${PUBLIC_URL}/api/auth/tiktok/callback`,
-      scope: 'user.info.basic,video.upload,video.publish',
+      // Solo gli scope abilitati nell'app TikTok: uno non abilitato blocca il login.
+      scope: process.env.TIKTOK_SCOPES ?? 'user.info.basic,video.upload,video.publish',
     },
   },
 };
