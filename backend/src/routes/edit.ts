@@ -4,7 +4,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { z } from 'zod';
 import { paths } from '../config';
-import { createJob, getJob, requeue } from '../lib/queue';
+import { createJob, getJob, requeue, saveJobs } from '../lib/queue';
 import { probeDuration, renderFinal, specSchema } from '../lib/render';
 import { generateEditSpec } from '../lib/llm';
 import { AppError, ERR } from '../lib/errors';
@@ -104,6 +104,7 @@ editRouter.post('/:jobId/media', mediaUpload.single('file') as unknown as expres
     await fs.rename(req.file.path, dest);
     const item = { id, kind, name: (req.file.originalname || id).slice(0, 80), path: dest, duration: kind === 'video' ? await probeDuration(dest) : undefined } as const;
     job.media = [...(job.media ?? []), item];
+    saveJobs();
     res.json({ id, kind, name: item.name, duration: item.duration });
   } catch (e) {
     next(e);
