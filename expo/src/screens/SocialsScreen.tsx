@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { CheckCircle2, Link2, Unlink } from 'lucide-react-native';
 import { Header, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
-import { linkedProviders, unlinkProvider } from '../services/api';
+import { authUrl, linkedProviders, unlinkProvider } from '../services/api';
 import { linkSocial } from '../services/social';
 
 const COLORS: Record<ProviderId, string> = { youtube: '#FF0000', instagram: '#E1306C', facebook: '#1877F2', tiktok: '#25F4EE' };
@@ -30,6 +30,20 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setBusy(null);
       refresh();
+    }
+  };
+
+  // Se il login nel telefono non va (TikTok a volte blocca la pagina mobile), si completa dal computer.
+  const connectFromComputer = async (id: ProviderId, label: string) => {
+    try {
+      const url = await authUrl(id);
+      Alert.alert(
+        `Collega ${label} dal computer`,
+        'Ti mando un link: aprilo sul computer (stessa rete Wi-Fi) entro 10 minuti e completa il login. Poi torna qui.',
+        [{ text: 'Annulla', style: 'cancel' }, { text: 'Condividi link', onPress: () => Share.share({ message: url }) }],
+      );
+    } catch (e) {
+      Alert.alert('Errore', e instanceof Error ? e.message : 'Riprova.');
     }
   };
 
@@ -61,6 +75,11 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
                 <Text style={[styles.state, on && { color: colors.ok }]}>
                   {linked === null ? 'controllo…' : on ? 'Collegato' : 'Non collegato'}
                 </Text>
+                {!on && linked !== null && (
+                  <Pressable onPress={() => connectFromComputer(p.id, p.label)} hitSlop={6}>
+                    <Text style={styles.alt}>Collega dal computer</Text>
+                  </Pressable>
+                )}
               </View>
               {busy === p.id ? <ActivityIndicator color={colors.accent} /> : on ? (
                 <Pressable onPress={() => disconnect(p.id, p.label)} style={[styles.btn, styles.btnOff]} hitSlop={6}>
@@ -99,6 +118,7 @@ const styles = StyleSheet.create({
   btnOn: { backgroundColor: colors.accent },
   btnOff: { borderWidth: 1, borderColor: colors.err },
   btnText: { fontFamily: fonts.semibold, fontSize: 13 },
+  alt: { color: colors.accent, fontSize: 12, marginTop: 4, fontFamily: fonts.semibold },
   note: { flexDirection: 'row', gap: 8, marginTop: 10, paddingHorizontal: 4 },
   noteText: { flex: 1, color: colors.textDim, fontSize: 12.5, lineHeight: 18 },
 });

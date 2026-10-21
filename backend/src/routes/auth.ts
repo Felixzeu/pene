@@ -15,11 +15,11 @@ type Provider = 'youtube' | 'instagram' | 'facebook' | 'tiktok';
 const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number; returnTo?: string; user: User }>();
 // Biglietti monouso: l'app (che ha il login) ne chiede uno e apre il browser con quello,
 // così il social collegato finisce sull'account giusto senza mettere il token nell'URL.
-const tickets = new Map<string, { user: User; createdAt: number }>();
+const tickets = new Map<string, { user: User; createdAt: number; ttl: number }>();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of pending) if (now - v.createdAt > 600000) pending.delete(k);
-  for (const [k, v] of tickets) if (now - v.createdAt > 120000) tickets.delete(k);
+  for (const [k, v] of tickets) if (now - v.createdAt > v.ttl) tickets.delete(k);
 }, 60000).unref();
 
 export const authRouter = Router();
@@ -30,9 +30,10 @@ const page = (msg: string) =>
 
 // GET /api/auth/status — quali social sono già collegati (anche se collegati da un altro dispositivo).
 // POST /api/auth/ticket — biglietto monouso (2 minuti) per aprire il login di un social.
-authRouter.post('/ticket', requireUser, (_req, res) => {
+// Con { computer: true } dura 10 minuti: serve per completare il login da un altro dispositivo.
+authRouter.post('/ticket', requireUser, (req, res) => {
   const ticket = randomBytes(18).toString('base64url');
-  tickets.set(ticket, { user: currentUser(), createdAt: Date.now() });
+  tickets.set(ticket, { user: currentUser(), createdAt: Date.now(), ttl: req.body?.computer ? 600000 : 120000 });
   res.json({ ticket });
 });
 
@@ -60,11 +61,11 @@ authRouter.get('/:provider', (req, res) => {
   let user: User = { id: 'local' };
   if (accountsEnabled()) {
     const t = typeof req.query.ticket === 'string' ? tickets.get(req.query.ticket) : undefined;
-    if (!t || Date.now() - t.createdAt > 120000) {
+    if (!t || Date.now() - t.createdAt > t.ttl) {
       res.status(401).send(page('Apri il collegamento dall\'app viral (Pubblica → Collega): il link è valido 2 minuti.'));
       return;
     }
-    // Il biglietto resta valido per i suoi 2 minuti: se il browser ricarica la pagina
+    // Il biglietto resta valido per tutta la sua durata: se il browser ricarica la pagina
     // (es. "Richiedi sito desktop" su iPhone) il login riparte invece di fallire.
     user = t.user;
   }

@@ -179,10 +179,15 @@ export const linkedProviders = () =>
 
 /** URL da aprire nel browser per collegare un social (OAuth2). */
 /** Link per collegare un social: con gli account attivi include un biglietto monouso. */
-export async function authUrl(provider: ProviderId, returnTo: string): Promise<string> {
-  const base = `${API_URL}/api/auth/${provider}?return=${encodeURIComponent(returnTo)}`;
+/** Senza returnTo il link è da aprire su un altro dispositivo (es. il computer) e vale 10 minuti. */
+export async function authUrl(provider: ProviderId, returnTo?: string): Promise<string> {
+  const base = `${API_URL}/api/auth/${provider}?return=${encodeURIComponent(returnTo ?? '')}`;
   if (!authHeaders().Authorization) return base;
-  const { ticket } = await request<{ ticket: string }>('/api/auth/ticket', { method: 'POST' }, 15000);
+  const { ticket } = await request<{ ticket: string }>('/api/auth/ticket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ computer: !returnTo }),
+  }, 15000);
   return `${base}&ticket=${encodeURIComponent(ticket)}`;
 }
 
