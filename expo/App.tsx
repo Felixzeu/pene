@@ -66,6 +66,13 @@ export default function App() {
               else if (p.scriptResult) push({ name: 'script', project: p });
               else push({ name: 'new' });
             }}
+            onModify={(p) => {
+              // Scorri a destra: apre direttamente la modifica (video montato) o lo script.
+              if (p.jobId && p.finalVideoUrl) setStack((s) => [...s, { name: 'publish', project: p }, { name: 'modify', project: p }]);
+              else if (p.jobId) push({ name: 'edit', project: p });
+              else if (p.scriptResult) push({ name: 'script', project: p });
+              else push({ name: 'new' });
+            }}
           />
         )}
 

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Clapperboard, MessageSquareWarning, Plus, Trash2, Video } from 'lucide-react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Clapperboard, MessageSquareWarning, Pencil, Plus, Trash2, Video } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Btn, Screen } from '../components/ui';
+import { Screen } from '../components/ui';
 import { colors, fonts, gradient } from '../theme';
 import { linkedProviders } from '../services/api';
 import { loadHistory, removeProject } from '../services/history';
@@ -25,12 +25,68 @@ function stageOf(p: Project): string {
   return STAGE_LABEL.script;
 }
 
-export default function HomeScreen({ onNew, onResume, onReport }: {
+const SWIPE = 90; // px oltre i quali lo scorrimento fa partire l'azione
+
+/**
+ * Riga dei recenti che si scorre col dito: verso sinistra elimina (con conferma),
+ * verso destra apre la modifica. Un tocco normale riprende il progetto.
+ */
+function SwipeRow({ onPress, onDelete, onEdit, onSwipe, children }: {
+  onPress: () => void;
+  onDelete: (reset: () => void) => void;
+  onEdit: () => void;
+  onSwipe: (active: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const x = useRef(new Animated.Value(0)).current;
+  const cb = useRef({ onDelete, onEdit, onSwipe });
+  cb.current = { onDelete, onEdit, onSwipe };
+  const back = () => Animated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+  const pan = useRef(PanResponder.create({
+    // Solo gesti chiaramente orizzontali: lo scorrimento verticale resta alla lista.
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+    onPanResponderGrant: () => cb.current.onSwipe(true),
+    onPanResponderMove: (_e, g) => x.setValue(g.dx),
+    onPanResponderRelease: (_e, g) => {
+      cb.current.onSwipe(false);
+      if (g.dx < -SWIPE) {
+        Animated.timing(x, { toValue: -140, duration: 120, useNativeDriver: true }).start();
+        cb.current.onDelete(back);
+      } else if (g.dx > SWIPE) {
+        back();
+        cb.current.onEdit();
+      } else back();
+    },
+    onPanResponderTerminate: () => { cb.current.onSwipe(false); back(); },
+  })).current;
+
+  const editOpacity = x.interpolate({ inputRange: [0, 40, SWIPE], outputRange: [0, 0.6, 1], extrapolate: 'clamp' });
+  const delOpacity = x.interpolate({ inputRange: [-SWIPE, -40, 0], outputRange: [1, 0.6, 0], extrapolate: 'clamp' });
+  return (
+    <View style={styles.swipeWrap}>
+      <Animated.View style={[styles.behind, styles.behindEdit, { opacity: editOpacity }]}>
+        <Pencil size={18} color={colors.onAccent} />
+        <Text style={styles.behindText}>Modifica</Text>
+      </Animated.View>
+      <Animated.View style={[styles.behind, styles.behindDel, { opacity: delOpacity }]}>
+        <Text style={styles.behindText}>Elimina</Text>
+        <Trash2 size={18} color={colors.onAccent} />
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
+        <Pressable style={styles.card} onPress={onPress}>{children}</Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
+export default function HomeScreen({ onNew, onResume, onModify, onReport }: {
   onNew: () => void;
   onResume: (p: Project) => void;
+  onModify: (p: Project) => void;
   onReport: () => void;
 }) {
   const [history, setHistory] = useState<Project[]>([]);
+  const [swiping, setSwiping] = useState(false);
   const [reload, setReload] = useState(0);
   const [linked, setLinked] = useState(0);
 
@@ -42,9 +98,9 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
   const thisWeek = history.filter((p) => p.createdAt > weekAgo).length;
 
-  const confirmDelete = (p: Project) =>
-    Alert.alert('Elimina progetto', 'Vuoi rimuoverlo dalla cronologia?', [
-      { text: 'Annulla', style: 'cancel' },
+  const confirmDelete = (p: Project, reset: () => void) =>
+    Alert.alert('Elimina progetto', `Vuoi eliminare "${p.scriptResult?.title || p.topic}"?`, [
+      { text: 'Annulla', style: 'cancel', onPress: reset },
       {
         text: 'Elimina', style: 'destructive',
         onPress: async () => { await removeProject(p.id); setReload((n) => n + 1); },
@@ -66,7 +122,7 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
           <Plus size={28} color={colors.onAccent} />
           <View>
             <Text style={styles.newTitle}>Nuovo video</Text>
-            <Text style={styles.newSub}>Idea → script → rec → post</Text>
+            <Text style={styles.newSub}>Dall'idea al post in pochi minuti</Text>
           </View>
         </LinearGradient>
       </Pressable>
@@ -82,7 +138,10 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Recenti</Text>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>Recenti</Text>
+        {history.length > 0 && <Text style={styles.sectionHint}>← elimina · modifica →</Text>}
+      </View>
     </View>
   );
 
@@ -93,6 +152,7 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
         keyExtractor={(p) => p.id}
         ListHeaderComponent={header}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}
+        scrollEnabled={!swiping}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Video size={34} color={colors.textDim} />
@@ -102,13 +162,15 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
             </Text>
           </View>
         }
-        ListFooterComponent={
-          <Btn label="Modmail & bug report" variant="ghost" onPress={onReport} style={{ marginTop: 18 }} />
-        }
         renderItem={({ item }) => {
           const live = item.published?.some((o) => o.status === 'published');
           return (
-            <Pressable style={styles.card} onPress={() => onResume(item)} onLongPress={() => confirmDelete(item)}>
+            <SwipeRow
+              onPress={() => onResume(item)}
+              onDelete={(reset) => confirmDelete(item, reset)}
+              onEdit={() => onModify(item)}
+              onSwipe={setSwiping}
+            >
               <View style={styles.thumb}><Clapperboard size={18} color={colors.textDim} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle} numberOfLines={1}>
@@ -123,10 +185,7 @@ export default function HomeScreen({ onNew, onResume, onReport }: {
                   {live ? 'live' : item.finalVideoUrl ? 'pronto' : stageOf(item).toLowerCase()}
                 </Text>
               </View>
-              <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation(); confirmDelete(item); }} accessibilityLabel="Elimina">
-                <Trash2 size={16} color={colors.textDim} />
-              </Pressable>
-            </Pressable>
+            </SwipeRow>
           );
         }}
       />
@@ -150,11 +209,21 @@ const styles = StyleSheet.create({
   stat: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, gap: 4 },
   statLabel: { color: colors.textDim, fontSize: 12 },
   statNum: { color: colors.text, fontFamily: fonts.display, fontSize: 23 },
-  sectionTitle: { color: colors.textDim, fontFamily: fonts.semibold, fontSize: 13, marginTop: 26, marginBottom: 10 },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 26, marginBottom: 10 },
+  sectionTitle: { color: colors.textDim, fontFamily: fonts.semibold, fontSize: 13 },
+  sectionHint: { color: colors.textDim, fontSize: 11.5, opacity: 0.7 },
+  swipeWrap: { marginBottom: 10 },
+  behind: {
+    position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20,
+  },
+  behindEdit: { backgroundColor: colors.accent2, justifyContent: 'flex-start' },
+  behindDel: { backgroundColor: colors.err, justifyContent: 'flex-end' },
+  behindText: { color: colors.onAccent, fontFamily: fonts.display, fontSize: 14 },
   card: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border,
-    padding: 12, marginBottom: 10,
+    padding: 12,
   },
   thumb: { width: 44, height: 56, borderRadius: 12, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { color: colors.text, fontFamily: fonts.semibold, fontSize: 15 },
