@@ -1,3 +1,4 @@
+import { hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { loadToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
@@ -16,7 +17,7 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
   const page = pagesData.data?.[0];
   if (!page) throw new AppError(ERR.publishFailed('Facebook', 'nessuna Pagina collegata'), 400);
 
-  const caption = `${meta.title}\n${meta.description}\n${meta.hashtags.map((h) => `#${h}`).join(' ')}`;
+  const caption = [meta.title, meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n');
 
   // 1. Avvia la sessione di upload Reels.
   const start = await fetch(`${GRAPH}/${page.id}/video_reels?upload_phase=START&access_token=${page.access_token}`, { method: 'POST' });

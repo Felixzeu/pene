@@ -1,3 +1,4 @@
+import { hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { loadToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
@@ -32,7 +33,7 @@ export const instagramPublish = async (meta: PublishMeta): Promise<PublishResult
   // 1. Container del Reel (attende che Meta scarichi il video dall'URL pubblico).
   const container = await fetch(
     `https://graph.facebook.com/v21.0/${igUserId}/media?media_type=REELS&video_url=${encodeURIComponent(meta.videoUrl)}` +
-    `&caption=${encodeURIComponent(`${meta.title}\n${meta.description}\n${meta.hashtags.map((h) => `#${h}`).join(' ')}`)}&access_token=${pageToken}`,
+    `&caption=${encodeURIComponent([meta.title, meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n'))}&access_token=${pageToken}`,
     { method: 'POST' },
   );
   const cData = (await container.json()) as { id?: string; error?: { message?: string } };

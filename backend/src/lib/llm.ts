@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { cleanTitle, normalizeHashtags } from './tags';
 import { AppError, ERR } from './errors';
 import { specSchema, type EditSpec } from './render';
 
@@ -17,7 +18,8 @@ Regole:
 - Frasi brevi, max 12 parole, facili da leggere ad alta voce.
 - Struttura: hook, corpo (2-4 punti concreti), call to action finale.
 - Durata target indicata in secondi: circa 150 parole al minuto.
-- Il titolo è max 70 caratteri, senza hashtag. Gli hashtag sono 5-8, senza "#" e senza spazi.
+- Il titolo è max 70 caratteri, nella lingua di output, accattivante, senza hashtag, senza emoji e senza virgolette.
+- Gli hashtag sono 5-8, pertinenti all'argomento, nella lingua di output (più 1-2 in inglese se molto usati), minuscoli, senza "#", senza spazi né punteggiatura. Non includere "viral": viene aggiunto in automatico.
 - Se non puoi scrivere lo script per l'argomento richiesto, rispondi SOLO con {"error": "motivo breve"}.`;
 
 function buildPrompt(p: { topic: string; tone: string; duration: number; platform: string; language: string }) {
@@ -134,8 +136,8 @@ function parseOutput(raw: string): ScriptOutput {
   if (REFUSAL.test(obj.script.trim())) throw new AppError(ERR.scriptRefused, 422);
   return {
     script: obj.script,
-    title: obj.title,
-    hashtags: Array.isArray(obj.hashtags) ? obj.hashtags.map(String).map((h) => h.replace(/^#/, '')) : [],
+    title: cleanTitle(obj.title),
+    hashtags: normalizeHashtags(Array.isArray(obj.hashtags) ? obj.hashtags.map(String) : typeof obj.hashtags === 'string' ? obj.hashtags : []),
   };
 }
 

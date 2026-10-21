@@ -1,3 +1,4 @@
+import { cleanTitle, normalizeHashtags } from '../lib/tags';
 import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../lib/config-bridge';
@@ -21,7 +22,8 @@ publishRouter.post('/', async (req, res, next) => {
   try {
     const body = schema.parse(req.body);
     // L'app si chiama viral: #viral sempre presente, in testa e senza doppioni.
-    body.hashtags = ['viral', ...body.hashtags.filter((h) => h.replace(/^#/, '').toLowerCase() !== 'viral')].slice(0, 15);
+    body.hashtags = normalizeHashtags(body.hashtags);
+    body.title = cleanTitle(body.title, 100) || 'Nuovo video';
     const job = getJob(body.jobId);
     if (!job?.finalPath) throw new AppError(ERR.jobNotFound, 404);
 

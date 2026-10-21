@@ -110,14 +110,25 @@ Style: TextBottom,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
   const lines: string[] = [];
   if (spec.subtitles) {
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      // Finestra di 6 parole centrata sulla parola corrente, evidenziata in ambra.
-      const window = words.slice(Math.max(0, i - 2), i + 4);
-      const text = window
-        .map((x) => (x === w ? `{\\c&H2BD4FF&}${assText(x.word)}{\\c&HFFFFFF&}` : assText(x.word)))
-        .join(' ');
-      lines.push(`Dialogue: 0,${fmtTime(w.start)},${fmtTime(w.end)},Social,,0,0,0,,${text}`);
+    // Stile TikTok: gruppi di max 4 parole che restano fermi a schermo, con la parola
+    // pronunciata evidenziata in ambra. Il gruppo cambia a fine frase o dopo una pausa.
+    const pages: Word[][] = [];
+    for (const w of words) {
+      const page = pages[pages.length - 1];
+      const prev = page?.[page.length - 1];
+      if (!page || page.length >= 4 || (prev && (w.start - prev.end > 0.6 || /[.!?…]$/.test(prev.word)))) pages.push([w]);
+      else page.push(w);
+    }
+    for (const page of pages) {
+      for (let i = 0; i < page.length; i++) {
+        const w = page[i];
+        // Resta acceso fino alla parola dopo (niente sfarfallio tra una parola e l'altra).
+        const end = i < page.length - 1 ? page[i + 1].start : w.end + 0.15;
+        const text = page
+          .map((x) => (x === w ? `{\\c&H2BD4FF&}${assText(x.word)}{\\c&HFFFFFF&}` : assText(x.word)))
+          .join(' ');
+        lines.push(`Dialogue: 0,${fmtTime(w.start)},${fmtTime(Math.max(end, w.start + 0.05))},Social,,0,0,0,,${text}`);
+      }
     }
   }
   for (const t of spec.texts) {

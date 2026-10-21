@@ -1,3 +1,4 @@
+import { hashtagLine } from '../lib/tags';
 import { statSync, promises as fsp } from 'fs';
 import { AppError, ERR } from '../lib/errors';
 import { freshAccessToken } from '../lib/tokens';
@@ -73,7 +74,7 @@ async function waitStatus(token: string, publishId: string): Promise<string> {
 
 export const tiktokPublish = async (meta: PublishMeta): Promise<PublishResult> => {
   const accessToken = await freshAccessToken('tiktok');
-  const caption = `${meta.title} ${meta.hashtags.map((h) => `#${h}`).join(' ')}`.slice(0, 2200);
+  const caption = [meta.title, meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n').slice(0, 2200);
   const size = statSync(meta.filePath).size;
   const { chunk, count } = chunking(size);
   const source_info = { source: 'FILE_UPLOAD', video_size: size, chunk_size: chunk, total_chunk_count: count };

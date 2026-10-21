@@ -1,3 +1,4 @@
+import { hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { freshAccessToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
@@ -20,8 +21,8 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
       },
       body: JSON.stringify({
         snippet: {
-          title: meta.title.slice(0, 100),
-          description: `${meta.description}\n\n${meta.hashtags.map((h) => `#${h}`).join(' ')}`,
+          title: `${meta.title.slice(0, 93)} #viral`, // #viral sempre, anche nel titolo
+          description: [meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n\n'),
           categoryId: '22',
         },
         status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },

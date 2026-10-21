@@ -20,12 +20,10 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   onModify: (p: Project) => void;
   update: (p: Project) => void;
 }) {
-  const [title, setTitle] = useState(project.scriptResult?.title ?? '');
+  const [title, setTitle] = useState((project.scriptResult?.title ?? '').replace(/#\S+/g, '').replace(/\s+/g, ' ').trim());
   const [description, setDescription] = useState('');
-  // #viral è sempre aggiunto dal backend; lo mostriamo già qui.
-  const [hashtags, setHashtags] = useState(
-    ['viral', ...(project.scriptResult?.hashtags ?? []).filter((h) => h.toLowerCase() !== 'viral')].join(' '),
-  );
+  // #viral è fisso (non si può togliere): nel campo ci sono solo gli altri hashtag.
+  const [hashtags, setHashtags] = useState(cleanTags(project.scriptResult?.hashtags ?? []).map((h) => `#${h}`).join(' '));
   const [selected, setSelected] = useState<ProviderId[]>(['youtube']);
   const [busy, setBusy] = useState<ProviderId[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +58,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         providers,
         title: title.trim().slice(0, 100),
         description: description.trim(),
-        hashtags: hashtags.split(/[\s,]+/).map((h) => h.replace(/^#/, '')).filter(Boolean).slice(0, 15),
+        hashtags: ['viral', ...cleanTags(hashtags)].slice(0, 15),
       });
       // Unisce i nuovi esiti a quelli precedenti (un "Riprova" sostituisce solo il suo social).
       const merged: PublishOutcome[] = [
@@ -127,8 +125,19 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         <Field label="Descrizione" hint="Facoltativa. Gli hashtag vengono aggiunti in automatico.">
           <TextArea value={description} onChangeText={setDescription} maxLength={2200} placeholder="Racconta il video in due righe" />
         </Field>
-        <Field label="Hashtag" hint="Separati da spazio, senza #.">
-          <Input value={hashtags} onChangeText={setHashtags} autoCapitalize="none" style={{ height: 50 }} />
+        <Field label="Hashtag" hint="#viral c'è sempre. Aggiungi gli altri separati da spazio.">
+          <View style={styles.tagRow}>
+            <View style={styles.tagLocked}><Text style={styles.tagLockedText}>#viral</Text></View>
+            <Input
+              value={hashtags}
+              onChangeText={setHashtags}
+              onBlur={() => setHashtags(cleanTags(hashtags).map((h) => `#${h}`).join(' '))}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="#tema #nicchia"
+              style={{ height: 50, flex: 1 }}
+            />
+          </View>
         </Field>
 
         <Text style={styles.section}>Social</Text>
@@ -203,7 +212,25 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   );
 }
 
+// Hashtag puliti: niente #, spazi o simboli, minuscoli, senza doppioni e senza "viral" (è già fisso).
+function cleanTags(input: string[] | string): string[] {
+  const parts = Array.isArray(input) ? input.flatMap((h) => h.split(/[\s,#]+/)) : input.split(/[\s,#]+/);
+  const out: string[] = [];
+  for (const p of parts) {
+    const t = p.normalize('NFKC').replace(/[^0-9a-zA-Z\u00C0-\u024F_]/g, '').toLowerCase().slice(0, 30);
+    if (t.length < 2 || t === 'viral' || out.includes(t)) continue;
+    out.push(t);
+  }
+  return out.slice(0, 14);
+}
+
 const styles = StyleSheet.create({
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tagLocked: {
+    backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 12, height: 50,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tagLockedText: { color: '#fff', fontWeight: '800', fontSize: 14 },
   playerWrap: {
     borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
     aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 14,
