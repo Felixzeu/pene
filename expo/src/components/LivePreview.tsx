@@ -19,6 +19,9 @@ const STICKER: Record<StickerKind, { label: string; bg: string }> = {
   link: { label: 'LINK IN BIO', bg: '#FF5CC8' },
 };
 const TEXT_SIZE = { small: 56, medium: 72, large: 96 } as const;
+// Come SAFE / SUB_SIZE / SUB_POS in backend/src/lib/render.ts: spazio lasciato all'interfaccia di TikTok e Instagram.
+export const SAFE = { left: 90, right: 180, top: 260, bottom: 560 } as const;
+const SUB_SIZE = { small: 58, medium: 74, large: 92 } as const;
 
 /** Come overlaySource nel backend: usa la foto scontornata? e proporzioni (null = copre tutto lo schermo). */
 export function overlayLook(o: OverlayItem, m?: MediaItem): { cut: boolean; aspect: number | null } {
@@ -27,39 +30,56 @@ export function overlayLook(o: OverlayItem, m?: MediaItem): { cut: boolean; aspe
   return { cut, aspect: (cut ? m?.cutoutAspect : m?.aspect) ?? 1 };
 }
 
-/** Riquadro trascinabile col dito: muove il centro della foto, salva alla fine del gesto. */
+/**
+ * Foto da spostare: un dito la trascina, due dita la allargano o la stringono.
+ * Il gesto si può fare su tutta l'anteprima, non solo sulla foto (più comodo se è piccola).
+ */
 function DragBox({ box, s, onMove, onDrag, children }: {
   box: { left: number; top: number; w: number; h: number };
   s: number;
-  onMove: (x: number, y: number) => void;
+  onMove: (x: number, y: number, w: number) => void;
   onDrag?: (dragging: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [d, setD] = useState({ x: 0, y: 0 });
-  const ref = useRef({ box, s, onMove, onDrag });
-  ref.current = { box, s, onMove, onDrag };
+  const [g, setG] = useState({ x: 0, y: 0, k: 1 });
+  const ref = useRef({ box, s, onMove, onDrag, pinch0: 0, k: 1 });
+  Object.assign(ref.current, { box, s, onMove, onDrag });
+  const dist = (t: readonly { pageX: number; pageY: number }[]) =>
+    Math.hypot(t[0].pageX - t[1].pageX, t[0].pageY - t[1].pageY);
   const pan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: () => ref.current.onDrag?.(true),
-    onPanResponderMove: (_e, g) => setD({ x: g.dx, y: g.dy }),
-    onPanResponderRelease: (_e, g) => {
+    onPanResponderGrant: () => { ref.current.pinch0 = 0; ref.current.k = 1; ref.current.onDrag?.(true); },
+    onPanResponderMove: (e, st) => {
+      const t = e.nativeEvent.touches;
+      if (t.length >= 2) {
+        const d = dist(t);
+        if (!ref.current.pinch0) ref.current.pinch0 = d / ref.current.k;
+        ref.current.k = Math.max(0.3, Math.min(4, d / ref.current.pinch0));
+      }
+      setG({ x: st.dx, y: st.dy, k: ref.current.k });
+    },
+    onPanResponderRelease: (_e, st) => {
       const { box: b, s: k } = ref.current;
-      const cx = Math.round(Math.max(0, Math.min(1080, b.left + b.w / 2 + g.dx / k)));
-      const cy = Math.round(Math.max(0, Math.min(1920, b.top + b.h / 2 + g.dy / k)));
-      setD({ x: 0, y: 0 });
-      ref.current.onMove(cx, cy);
+      const w = Math.round(Math.max(160, Math.min(1080, b.w * ref.current.k)));
+      const cx = Math.round(Math.max(0, Math.min(1080, b.left + b.w / 2 + st.dx / k)));
+      const cy = Math.round(Math.max(0, Math.min(1920, b.top + b.h / 2 + st.dy / k)));
+      setG({ x: 0, y: 0, k: 1 });
+      ref.current.onMove(cx, cy, w);
       ref.current.onDrag?.(false);
     },
-    onPanResponderTerminate: () => { setD({ x: 0, y: 0 }); ref.current.onDrag?.(false); },
+    onPanResponderTerminate: () => { setG({ x: 0, y: 0, k: 1 }); ref.current.onDrag?.(false); },
   })).current;
+  const bw = box.w * s * g.k;
+  const bh = box.h * s * g.k;
+  const cx = (box.left + box.w / 2) * s + g.x;
+  const cy = (box.top + box.h / 2) * s + g.y;
   return (
-    <View
-      {...pan.panHandlers}
-      style={[styles.dragBox, { left: box.left * s + d.x, top: box.top * s + d.y, width: box.w * s, height: box.h * s }]}
-    >
-      {children}
+    <View {...pan.panHandlers} style={StyleSheet.absoluteFill}>
+      <View pointerEvents="none" style={[styles.dragBox, { left: cx - bw / 2, top: cy - bh / 2, width: bw, height: bh }]}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -91,7 +111,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
   mediaUri: (id: string, cutout: boolean) => { uri: string; headers?: Record<string, string> };
   /** Foto da spostare: resta visibile e si trascina col dito. */
   selectedId?: string | null;
-  onMoveOverlay?: (id: string, x: number, y: number) => void;
+  onMoveOverlay?: (id: string, x: number, y: number, w: number) => void;
   onDrag?: (dragging: boolean) => void;
 }) {
   const [w, setW] = useState(0);
@@ -147,22 +167,29 @@ export default function LivePreview({ player, spec, words, media, duration, medi
       )}
       {w > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {sub && (
-            <View style={[styles.lineBox, { bottom: 560 * s }]}>
-              <Text style={[styles.outline, { fontSize: 74 * s, lineHeight: 88 * s }]}>
+          {sub && (() => {
+            const ss = spec.subStyle ?? { size: 'medium', position: 'low' };
+            const fs = SUB_SIZE[ss.size];
+            const place = ss.position === 'low' ? { bottom: SAFE.bottom * s }
+              : ss.position === 'high' ? { top: 420 * s } : { top: 0, bottom: 0, justifyContent: 'center' as const };
+            return (
+            <View style={[styles.lineBox, { left: SAFE.left * s, right: SAFE.right * s }, place]}>
+              <Text style={[styles.outline, { fontSize: fs * s, lineHeight: fs * 1.19 * s }]}>
                 {sub.words.map((x, i) => (
                   <Text key={i} style={x === sub.current ? { color: '#FFD42B' } : undefined}>{x.word}{i < sub.words.length - 1 ? ' ' : ''}</Text>
                 ))}
               </Text>
             </View>
-          )}
+            );
+          })()}
 
           {spec.texts.filter(on).filter((x) => x.text.trim()).map((x) => (
             <View
               key={x.id}
               style={[
                 styles.lineBox,
-                x.position === 'top' ? { top: 260 * s } : x.position === 'bottom' ? { bottom: 320 * s } : { top: 0, bottom: 0, justifyContent: 'center' },
+                { left: SAFE.left * s, right: SAFE.right * s },
+                x.position === 'top' ? { top: 260 * s } : x.position === 'bottom' ? { bottom: SAFE.bottom * s } : { top: 0, bottom: 0, justifyContent: 'center' },
               ]}
             >
               <Text style={[styles.outline, { fontSize: TEXT_SIZE[x.size] * s, lineHeight: TEXT_SIZE[x.size] * 1.2 * s }]}>{x.text}</Text>
@@ -188,14 +215,14 @@ export default function LivePreview({ player, spec, words, media, duration, medi
         if (look.aspect == null) return null; // a schermo intero non si sposta
         const b = overlayBox(selected, look.aspect);
         return (
-          <DragBox box={b} s={s} onDrag={onDrag} onMove={(x, y) => onMoveOverlay?.(selected.id, x, y)}>
+          <DragBox box={b} s={s} onDrag={onDrag} onMove={(x, y, bw) => onMoveOverlay?.(selected.id, x, y, bw)}>
             {m?.kind === 'image'
               ? <Image source={mediaUri(m.id, look.cut)} style={StyleSheet.absoluteFill} resizeMode="contain" />
               : <View style={[StyleSheet.absoluteFill, styles.videoBox]}><Text style={styles.videoText}>VIDEO</Text></View>}
           </DragBox>
         );
       })()}
-      <View style={styles.badge}><Text style={styles.badgeText}>{selected ? 'TRASCINA LA FOTO' : 'ANTEPRIMA'}</Text></View>
+      <View style={styles.badge}><Text style={styles.badgeText}>{selected ? 'TRASCINA · 2 DITA PER LA GRANDEZZA' : 'ANTEPRIMA'}</Text></View>
     </View>
   );
 }
@@ -205,7 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
     aspectRatio: 9 / 16, width: '68%', alignSelf: 'center', marginBottom: 16,
   },
-  lineBox: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: '6%' },
+  lineBox: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   outline: {
     color: '#fff', fontWeight: '900', textAlign: 'center',
     textShadowColor: 'rgba(16,16,20,0.95)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 0 },

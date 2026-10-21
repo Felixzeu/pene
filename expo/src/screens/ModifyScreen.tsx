@@ -1,37 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  AlertTriangle, BadgePlus, CheckCircle2, Clock, Eye, ImagePlus, Minus, Move, Plus, Sparkles, Trash2, Type as TypeIcon, Wand2,
+  AlertTriangle, CheckCircle2, Eye, ImagePlus, Info, Minus, Move, Pause, Play, Plus, Sparkles, Trash2, Type as TypeIcon, Wand2,
 } from 'lucide-react-native';
-import { Badge, Btn, ChipRow, Field, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
+import { Badge, Btn, ChipRow, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
+import { RangeBar, VideoTimeline } from '../components/Timeline';
 import { colors, radius } from '../theme';
 import { aiEdit, getJob, jobMediaSource, renderEdit, uploadMedia } from '../services/api';
 import LivePreview, { overlayLook } from '../components/LivePreview';
 import { overlayBox } from '../lib/stickerLayout';
 import { upsertProject } from '../services/history';
-import type { EditSpec, Job, OverlayItem, Project, StickerItem, StickerKind, TextItem } from '../types';
+import type { EditSpec, Job, OverlayItem, Project, TextItem } from '../types';
 
-const EMPTY: EditSpec = { trimStart: 0, trimEnd: 0, subtitles: true, texts: [], overlays: [], stickers: [] };
+type SubStyle = NonNullable<EditSpec['subStyle']>;
+const SUB_DEFAULT: SubStyle = { size: 'medium', position: 'low' };
+const EMPTY: EditSpec = { trimStart: 0, trimEnd: 0, subtitles: true, subStyle: SUB_DEFAULT, texts: [], overlays: [], stickers: [] };
 
 const POSITIONS = { Alto: 'top', Centro: 'center', Basso: 'bottom' } as const;
 const SIZES = { Piccolo: 'small', Medio: 'medium', Grande: 'large' } as const;
 const MODES = { 'Schermo intero': 'full', Riquadro: 'pip' } as const;
 const PIP_POS = { 'Alto sx': 'top-left', 'Alto dx': 'top-right', Centro: 'center', 'Basso sx': 'bottom-left', 'Basso dx': 'bottom-right' } as const;
-const STICKERS: { kind: StickerKind; label: string }[] = [
-  { kind: 'follow', label: '+ Segui' }, { kind: 'like', label: '♥ Mi piace' }, { kind: 'subscribe', label: 'Iscriviti' },
-  { kind: 'comment', label: 'Commenta' }, { kind: 'share', label: 'Condividi' }, { kind: 'link', label: 'Link in bio' },
-];
-const stickerLabel = (k: StickerKind) => STICKERS.find((x) => x.kind === k)?.label ?? k;
+const SUB_SIZES = { Piccoli: 'small', Medi: 'medium', Grandi: 'large' } as const;
+const SUB_POS = { 'In basso': 'low', 'Al centro': 'middle', 'In alto': 'high' } as const;
 const labelOf = <T extends string>(map: Record<string, T>, v: T) =>
   Object.keys(map).find((k) => map[k] === v) as string;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const newId = (p: string) => `${p}${Date.now().toString(36).slice(-5)}`;
 
-// Modifiche dopo il primo montaggio: testi a schermo, foto/video della galleria, sticker
-// (+ SEGUI...), taglio di inizio/fine e istruzioni libere all'IA. Ogni modifica si vede
+// Modifiche dopo il primo montaggio: testi a schermo, foto/video della galleria, sottotitoli,
+// taglio di inizio/fine sulla timeline e istruzioni libere all'IA. Ogni modifica si vede
 // subito nell'anteprima live; il backend rifà l'export solo premendo "Applica modifiche".
 export default function ModifyScreen({ project, onBack, onDone }: {
   project: Project;
@@ -45,6 +45,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const [instruction, setInstruction] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiNotes, setAiNotes] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,17 +53,25 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const [moving, setMoving] = useState<string | null>(null); // foto che si sta spostando a mano
   const [dragging, setDragging] = useState(false);
 
-  const [showFinal, setShowFinal] = useState(false);
-  const videoUrl = job?.finalVideoUrl ?? null;
   const previewSrc = job?.previewUrl ?? null;
-  const player = useVideoPlayer(videoUrl ? { uri: videoUrl } : null, (p) => { p.loop = true; });
   const previewPlayer = useVideoPlayer(previewSrc ? { uri: previewSrc } : null, (p) => { p.loop = true; p.play(); });
+  // Posizione della testina sulla timeline (secondi del video originale).
+  const [time, setTime] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setTime(previewPlayer.currentTime ?? 0), 120);
+    return () => clearInterval(id);
+  }, [previewPlayer]);
+  const seek = (t: number) => { previewPlayer.pause(); setPlaying(false); previewPlayer.currentTime = t; setTime(t); };
+  const togglePlay = () => {
+    if (playing) { previewPlayer.pause(); setPlaying(false); } else { setMoving(null); previewPlayer.play(); setPlaying(true); }
+  };
 
   // Stato iniziale dal backend (spec attuale e media già caricati).
   useEffect(() => {
     getJob(jobId).then((j) => {
       setJob(j);
-      const s = { ...EMPTY, ...(j.spec ?? {}), stickers: j.spec?.stickers ?? [] };
+      const s = { ...EMPTY, ...(j.spec ?? {}), subStyle: j.spec?.subStyle ?? SUB_DEFAULT, stickers: j.spec?.stickers ?? [] };
       setSpec(s);
       setApplied(s);
     }).catch((e) => setError(e instanceof Error ? e.message : 'Backend non raggiungibile.'));
@@ -80,10 +89,9 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     setSpec((s) => ({ ...s, overlays: s.overlays.map((o) => (o.id === id ? { ...o, ...p } : o)) }));
   // "Sposta": ferma l'anteprima nel momento della foto, così resta visibile mentre la trascini.
   const toggleMove = (o: OverlayItem) => {
-    if (moving === o.id) { setMoving(null); previewPlayer.play(); return; }
-    setShowFinal(false);
-    player.pause();
+    if (moving === o.id) { setMoving(null); previewPlayer.play(); setPlaying(true); return; }
     previewPlayer.pause();
+    setPlaying(false);
     previewPlayer.currentTime = spec.trimStart + o.start + Math.min(0.3, (o.end - o.start) / 2);
     setMoving(o.id);
   };
@@ -99,13 +107,6 @@ export default function ModifyScreen({ project, onBack, onDone }: {
       y: Math.round(b.top + b.h / 2),
     });
   };
-  const patchSticker = (id: string, p: Partial<StickerItem>) =>
-    setSpec((s) => ({ ...s, stickers: s.stickers.map((o) => (o.id === id ? { ...o, ...p } : o)) }));
-  const addSticker = (kind: StickerKind) => {
-    const start = now();
-    setSpec((s) => ({ ...s, stickers: [...s.stickers, { id: newId('s'), kind, start, end: round1(Math.min(start + 2.5, finalLen)), position: 'center' }] }));
-  };
-
   const addText = () => {
     const start = now();
     setSpec((s) => ({
@@ -141,7 +142,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         const cut = media.cutout ? ' La foto è già scontornata (senza sfondo): usala con "cutout": true come elemento sopra il video.' : '';
         const out = await aiEdit(jobId, `Inserisci il nuovo media "${media.id}" (${media.kind}, "${media.name}") nel punto più adatto in base alla trascrizione, con durata, modalità, grandezza e posizione ottimali.${cut} Non cambiare nient'altro.`, spec);
         setSpec(out.spec);
-        setAiSummary(`${out.summary} Guarda l'anteprima: con "Sposta" puoi trascinarla dove vuoi. Poi premi Applica modifiche.`);
+        setAiSummary(`${out.summary} Guarda l'anteprima: con "Sposta" la trascini e con due dita cambi la grandezza. Poi premi Applica modifiche.`);
       } catch {
         const start = now();
         const len = media.kind === 'video' && media.duration ? Math.min(media.duration, 5) : 3;
@@ -192,14 +193,15 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     if (instruction.trim().length < 3) return;
     setError(null);
     setAiSummary(null);
+    setAiNotes(null);
     setAiBusy(true);
     try {
       const out = await aiEdit(jobId, instruction.trim(), spec);
-      setSpec(out.spec);
+      setSpec({ ...out.spec, subStyle: out.spec.subStyle ?? spec.subStyle ?? SUB_DEFAULT });
       if (out.media) setJob((j) => (j ? { ...j, media: out.media } : j));
       setAiSummary(`${out.summary} È solo un'anteprima: premi Applica modifiche per salvarla nel video.`);
+      setAiNotes(out.notes ?? null);
       setInstruction('');
-      setShowFinal(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'L IA non ha risposto.');
     } finally {
@@ -214,11 +216,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     <Screen>
       <Header title="Modifica il video" subtitle="Testi, foto e video, o chiedi all'IA" onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging}>
-        {showFinal && videoUrl ? (
-          <View style={styles.playerWrap}>
-            <VideoView player={player} style={styles.player} contentFit="contain" />
-          </View>
-        ) : previewSrc ? (
+        {previewSrc ? (
           <LivePreview
             player={previewPlayer}
             spec={spec}
@@ -227,21 +225,31 @@ export default function ModifyScreen({ project, onBack, onDone }: {
             duration={job?.duration ?? 0}
             mediaUri={(id, cut) => jobMediaSource(jobId, id, cut)}
             selectedId={moving}
-            onMoveOverlay={(id, x, y) => patchOverlay(id, { x, y })}
+            onMoveOverlay={(id, x, y, w) => patchOverlay(id, { x, y, w })}
             onDrag={setDragging}
           />
         ) : null}
+        {/* Timeline: scorri il video e trascina le maniglie rosa per tagliare inizio e fine. */}
+        {job?.duration ? (
+          <View style={styles.timelineRow}>
+            <Pressable onPress={togglePlay} style={styles.playBtn} hitSlop={6}>
+              {playing ? <Pause size={18} color={colors.text} /> : <Play size={18} color={colors.text} />}
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <VideoTimeline
+                duration={job.duration}
+                trimStart={spec.trimStart}
+                trimEnd={spec.trimEnd}
+                time={time}
+                onSeek={seek}
+                onTrim={(p) => setSpec((s) => ({ ...s, ...p }))}
+                onDrag={setDragging}
+              />
+            </View>
+          </View>
+        ) : null}
         <View style={{ alignItems: 'center', marginBottom: 12 }}>
-          <ChipRow
-            options={['Anteprima live', 'Video finale']}
-            value={showFinal ? 'Video finale' : 'Anteprima live'}
-            onChange={(v) => {
-              const fin = v === 'Video finale';
-              setShowFinal(fin);
-              if (fin) { previewPlayer.pause(); player.play(); } else { player.pause(); previewPlayer.play(); }
-            }}
-          />
-          {dirty && !showFinal && (
+          {dirty && (
             <View style={styles.dirtyRow}><Eye size={13} color={colors.warm} /><Text style={styles.dirtyText}>Modifiche non ancora applicate</Text></View>
           )}
         </View>
@@ -256,6 +264,12 @@ export default function ModifyScreen({ project, onBack, onDone }: {
           <View style={styles.okBox}>
             <CheckCircle2 size={17} color={colors.ok} />
             <Text style={styles.okText}>{aiSummary}</Text>
+          </View>
+        )}
+        {aiNotes && !rendering && (
+          <View style={styles.noteBox}>
+            <Info size={17} color={colors.warm} />
+            <Text style={styles.noteText}>{aiNotes}</Text>
           </View>
         )}
         {error && (
@@ -301,7 +315,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
                 <Trash2 size={18} color={colors.err} />
               </Pressable>
             </View>
-            <TimeRow start={t.start} end={t.end} onChange={(p) => patchText(t.id, p)} now={now} />
+            <RangeBar total={finalLen} start={t.start} end={t.end} onChange={(p) => patchText(t.id, p)} onDrag={setDragging} color={colors.accent2} />
             <ChipRow options={Object.keys(POSITIONS)} value={labelOf(POSITIONS, t.position)} onChange={(v) => patchText(t.id, { position: POSITIONS[v as keyof typeof POSITIONS] })} />
             <View style={{ height: 8 }} />
             <ChipRow options={Object.keys(SIZES)} value={labelOf(SIZES, t.size)} onChange={(v) => patchText(t.id, { size: SIZES[v as keyof typeof SIZES] })} />
@@ -322,7 +336,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
                   <Trash2 size={18} color={colors.err} />
                 </Pressable>
               </View>
-              <TimeRow start={o.start} end={o.end} onChange={(p) => patchOverlay(o.id, p)} now={now} />
+              <RangeBar total={finalLen} start={o.start} end={o.end} onChange={(p) => patchOverlay(o.id, p)} onDrag={setDragging} color={colors.warm} />
               <ChipRow options={Object.keys(MODES)} value={labelOf(MODES, o.mode)} onChange={(v) => patchOverlay(o.id, { mode: MODES[v as keyof typeof MODES] })} />
               {m?.kind === 'image' && m.cutout && (
                 <View style={{ marginTop: 8 }}>
@@ -353,7 +367,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
                   {o.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
                 </View>
               )}
-              {moving === o.id && <Text style={styles.moveHint}>Trascina la foto nell'anteprima qui sopra.</Text>}
+              {moving === o.id && <Text style={styles.moveHint}>Nell'anteprima qui sopra: un dito per spostarla, due dita per allargarla o stringerla.</Text>}
             </View>
           );
         })}
@@ -365,44 +379,28 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         )}
         <Btn label="Aggiungi dalla galleria" variant="ghost" icon={<ImagePlus size={17} color={colors.text} />} onPress={addMedia} disabled={busy} />
 
-        {/* Sticker */}
-        <Text style={styles.section}>Pulsanti animati</Text>
-        {spec.stickers.map((st) => (
-          <View key={st.id} style={styles.card}>
-            <View style={styles.cardHead}>
-              <BadgePlus size={16} color={colors.accent} />
-              <Text style={styles.mediaName}>{stickerLabel(st.kind)}</Text>
-              <Pressable hitSlop={10} onPress={() => setSpec((s) => ({ ...s, stickers: s.stickers.filter((x) => x.id !== st.id) }))}>
-                <Trash2 size={18} color={colors.err} />
-              </Pressable>
-            </View>
-            <TimeRow start={st.start} end={st.end} onChange={(p) => patchSticker(st.id, p)} now={now} />
-            <ChipRow options={Object.keys(POSITIONS)} value={labelOf(POSITIONS, st.position)} onChange={(v) => patchSticker(st.id, { position: POSITIONS[v as keyof typeof POSITIONS] })} />
-          </View>
-        ))}
-        <View style={styles.stickerRow}>
-          {STICKERS.map((x) => (
-            <Pressable key={x.kind} onPress={() => addSticker(x.kind)} disabled={busy} style={styles.stickerChip}>
-              <Text style={styles.stickerChipText}>{x.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Taglio e sottotitoli */}
-        <Text style={styles.section}>Taglio e sottotitoli</Text>
+        {/* Sottotitoli */}
+        <Text style={styles.section}>Sottotitoli</Text>
         <View style={styles.card}>
-          <View style={styles.row}>
-            <Field label="Togli all'inizio (s)" style={{ flex: 1, marginBottom: 0 }}>
-              <NumInput value={spec.trimStart} onChange={(n) => setSpec((s) => ({ ...s, trimStart: n }))} />
-            </Field>
-            <Field label="Togli alla fine (s)" style={{ flex: 1, marginBottom: 0 }}>
-              <NumInput value={spec.trimEnd} onChange={(n) => setSpec((s) => ({ ...s, trimEnd: n }))} />
-            </Field>
-          </View>
-          <View style={{ height: 12 }} />
-          <ChipRow options={['Sottotitoli sì', 'Sottotitoli no']} value={spec.subtitles ? 'Sottotitoli sì' : 'Sottotitoli no'} onChange={(v) => setSpec((s) => ({ ...s, subtitles: v === 'Sottotitoli sì' }))} />
+          <ChipRow options={['Sì', 'No']} value={spec.subtitles ? 'Sì' : 'No'} onChange={(v) => setSpec((s) => ({ ...s, subtitles: v === 'Sì' }))} />
+          {spec.subtitles && (
+            <>
+              <Text style={styles.subLabel}>Grandezza</Text>
+              <ChipRow
+                options={Object.keys(SUB_SIZES)}
+                value={labelOf(SUB_SIZES, (spec.subStyle ?? SUB_DEFAULT).size)}
+                onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), size: SUB_SIZES[v as keyof typeof SUB_SIZES] } }))}
+              />
+              <Text style={styles.subLabel}>Posizione</Text>
+              <ChipRow
+                options={Object.keys(SUB_POS)}
+                value={labelOf(SUB_POS, (spec.subStyle ?? SUB_DEFAULT).position)}
+                onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), position: SUB_POS[v as keyof typeof SUB_POS] } }))}
+              />
+            </>
+          )}
         </View>
-        <Text style={styles.hint}>I tempi sono in secondi sul video finale, cioè dopo il taglio iniziale. "Ora" usa il punto in cui hai messo in pausa il video.</Text>
+        <Text style={styles.hint}>Sottotitoli e testi restano sempre lontani dai bordi, dove TikTok e Instagram mettono descrizione e pulsanti. Per tagliare l'inizio o la fine trascina le maniglie rosa della timeline sotto il video.</Text>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
           <Btn
@@ -433,46 +431,6 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   );
 }
 
-function TimeRow({ start, end, onChange, now }: {
-  start: number; end: number; onChange: (p: { start?: number; end?: number }) => void; now: () => number;
-}) {
-  return (
-    <View style={[styles.row, { marginBottom: 10 }]}>
-      <Text style={styles.timeLabel}>Da</Text>
-      <NumInput value={start} onChange={(n) => onChange({ start: n })} />
-      <Pressable hitSlop={8} onPress={() => onChange({ start: now() })} style={styles.nowBtn}>
-        <Clock size={13} color={colors.textDim} /><Text style={styles.nowText}>Ora</Text>
-      </Pressable>
-      <Text style={styles.timeLabel}>a</Text>
-      <NumInput value={end} onChange={(n) => onChange({ end: n })} />
-      <Pressable hitSlop={8} onPress={() => onChange({ end: now() })} style={styles.nowBtn}>
-        <Clock size={13} color={colors.textDim} /><Text style={styles.nowText}>Ora</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-// Campo numerico in secondi: accetta anche la virgola, applica il valore a fine modifica.
-function NumInput({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const [text, setText] = useState(String(value));
-  useEffect(() => { setText(String(value)); }, [value]);
-  const commit = () => {
-    const n = Number(text.replace(',', '.'));
-    if (Number.isFinite(n) && n >= 0) onChange(round1(n));
-    else setText(String(value));
-  };
-  return (
-    <Input
-      value={text}
-      onChangeText={setText}
-      onEndEditing={commit}
-      onBlur={commit}
-      keyboardType="decimal-pad"
-      style={{ width: 64, height: 40, textAlign: 'center', paddingHorizontal: 6 }}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   moveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   moveBtn: {
@@ -486,11 +444,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
   },
   moveHint: { color: colors.textDim, fontSize: 12, marginTop: 6 },
-  playerWrap: {
-    borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
-    aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 16,
+  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
+  playBtn: {
+    width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border,
   },
-  player: { flex: 1 },
+  subLabel: { color: colors.textDim, fontSize: 12.5, marginTop: 12, marginBottom: 6 },
+  noteBox: {
+    flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12,
+    backgroundColor: 'rgba(255,214,107,0.1)', borderRadius: radius.md, padding: 12,
+  },
+  noteText: { color: colors.warm, flex: 1, fontSize: 13.5, lineHeight: 19 },
   section: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 24, marginBottom: 10 },
   card: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
@@ -498,16 +462,9 @@ const styles = StyleSheet.create({
   },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   mediaName: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  timeLabel: { color: colors.textDim, fontSize: 13 },
-  nowBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6 },
-  nowText: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 8, lineHeight: 17 },
   dirtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   dirtyText: { color: colors.warm, fontSize: 12, fontWeight: '600' },
-  stickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  stickerChip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: colors.accentSoft, borderWidth: 1, borderColor: colors.accent },
-  stickerChipText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   renderBox: { marginBottom: 12, gap: 8 },
   renderText: { color: colors.textDim, fontSize: 13, marginBottom: 6 },
   okBox: {

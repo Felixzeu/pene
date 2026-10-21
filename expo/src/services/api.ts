@@ -143,7 +143,7 @@ export const jobMediaSource = (jobId: string, mediaId: string, cutout = false) =
 });
 
 export const aiEdit = (jobId: string, instruction: string, spec: EditSpec) =>
-  request<{ spec: EditSpec; summary: string; media?: MediaItem[] }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
+  request<{ spec: EditSpec; summary: string; notes?: string; media?: MediaItem[] }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instruction, spec }),

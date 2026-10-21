@@ -194,18 +194,20 @@ function parseOutput(raw: string): ScriptOutput {
 const EDIT_SYSTEM = `Sei l'assistente di montaggio di un'app per video verticali (TikTok, Reels, Shorts).
 Ricevi lo stato attuale del montaggio (JSON "spec"), la trascrizione con i tempi e i media disponibili.
 Applica le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
-{"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase in italiano"}
+{"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase in italiano", "notes": "cosa NON hai potuto fare e perché (solo se serve)"}
 Formato della spec:
 {"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
  "subtitles": true|false,
+ "subStyle": {"size": "small"|"medium"|"large", "position": "low"|"middle"|"high"},
  "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
  "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
                "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right",
                "cutout": true|false, "w": larghezza in px (120-1080, facoltativo), "x": px, "y": px (centro, facoltativi)}],
  "stickers": [{"id": string, "kind": "follow"|"like"|"subscribe"|"comment"|"share"|"link", "label": testo facoltativo, "start": s, "end": s, "position": "top"|"center"|"bottom"}]}
 Strumenti:
-- "stickers" sono pulsanti animati già pronti: follow = "+ SEGUI" / tasto segui, like = "♥ MI PIACE", subscribe = "ISCRIVITI",
-  comment = "COMMENTA", share = "CONDIVIDI", link = "LINK IN BIO". Per "tasto segui", "metti il like", "iscriviti" usa SEMPRE uno sticker.
+- "subStyle" cambia i sottotitoli: "size" (rimpicciolisci = più piccolo, ingrandisci = più grande) e "position" (low = in basso,
+  middle = al centro, high = in alto). Quando li cambi, nel summary aggiungi che si possono regolare anche nella sezione "Sottotitoli".
+- "stickers": non aggiungerne di nuovi (lascia invariati quelli che ci sono).
 - Se l'utente chiede un'immagine che NON è tra i media (es. "una foto della Torre Eiffel", "il logo di Instagram"),
   aggiungi un overlay con "search": "parole di ricerca brevi in inglese" al posto di "mediaId": il backend la scarica da internet.
 Regole di posizionamento (fai scelte da montatore esperto):
@@ -221,7 +223,9 @@ Regole di posizionamento (fai scelte da montatore esperto):
 - "x"/"y" sono la posizione scelta a mano dall'utente: non cambiarle se non te lo chiede; se chiede di spostare una foto in un angolo, toglile.
 - Non sovrapporre nello stesso istante due elementi nella stessa posizione.
 - Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.
-- Se la richiesta non è una modifica realizzabile con questi strumenti, rispondi {"error": "spiegazione breve in italiano"}.`;
+- Se una PARTE della richiesta non si può fare (es. cambiare il colore o il font dei sottotitoli, effetti, musica),
+  fai comunque tutto il resto e spiega in "notes" cosa non hai potuto fare. Il font e i colori dei sottotitoli non si cambiano.
+- Solo se NIENTE della richiesta è realizzabile rispondi {"error": "spiegazione breve in italiano"}.`;
 
 export async function generateEditSpec(p: {
   instruction: string;
@@ -231,7 +235,7 @@ export async function generateEditSpec(p: {
   media: { id: string; kind: string; name: string; duration?: number; cutout?: boolean; aspect?: number; cutoutAspect?: number }[];
   /** Scarica da internet un'immagine per un overlay con "search" e ne restituisce l'id. */
   fetchImage?: (query: string) => Promise<{ id: string; kind: string; name: string }>;
-}): Promise<{ spec: EditSpec; summary: string }> {
+}): Promise<{ spec: EditSpec; summary: string; notes?: string }> {
   const shift = p.spec.trimStart;
   const finalLen = Math.max(0, p.duration - p.spec.trimStart - p.spec.trimEnd);
   const transcript = p.words
@@ -251,7 +255,7 @@ ${transcript.slice(0, 6000)}`;
   let text = raw.trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) text = fence[1] as string;
-  let obj: { spec?: unknown; summary?: string; error?: string };
+  let obj: { spec?: unknown; summary?: string; notes?: string; error?: string };
   try {
     obj = JSON.parse(text);
   } catch {
@@ -273,5 +277,6 @@ ${transcript.slice(0, 6000)}`;
   // Scarta media inesistenti inventati dal modello.
   const ids = new Set(p.media.map((m) => m.id));
   const spec = { ...parsed.data, overlays: parsed.data.overlays.filter((o) => ids.has(o.mediaId)) };
-  return { spec, summary: (obj.summary ?? 'Modifica applicata.').slice(0, 300) };
+  const notes = typeof obj.notes === 'string' && obj.notes.trim() ? obj.notes.trim().slice(0, 300) : undefined;
+  return { spec, summary: (obj.summary ?? 'Modifica applicata.').slice(0, 300), notes };
 }
