@@ -202,7 +202,7 @@ export default function EditScreen({ project, onBack, onReady, onModify, onHome 
           {finalUrl ? (
             <>
               <Btn label="Modifica" variant="ghost" icon={<Wand2 size={17} color={colors.text} />} onPress={() => onModify({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1 }} />
-              <Btn label="Pubblica" icon={<Share2 size={17} color="#fff" />} onPress={() => onReady({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
+              <Btn label="Pubblica" icon={<Share2 size={17} color="#0B0716" />} onPress={() => onReady({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
             </>
           ) : (
             <>
@@ -210,7 +210,7 @@ export default function EditScreen({ project, onBack, onReady, onModify, onHome 
               <Btn
                 label="Riprova montaggio"
                 variant="warm"
-                icon={<Sparkles size={17} color="#221704" />}
+                icon={<Sparkles size={17} color="#0B0716" />}
                 onPress={retry}
                 loading={retrying}
                 disabled={!failed || !project.rawVideoUri}

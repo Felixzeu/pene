@@ -132,7 +132,7 @@ export default function ScriptScreen({ project, onBack, onRecord, update }: {
             disabled={!!rewriting || ask.trim().length < 2}
             style={[styles.askBtn, (ask.trim().length < 2 || !!rewriting) && { opacity: 0.4 }]}
           >
-            {rewriting === 'ask' ? <ActivityIndicator size="small" color="#fff" /> : <Sparkles size={18} color="#fff" />}
+            {rewriting === 'ask' ? <ActivityIndicator size="small" color="#0B0716" /> : <Sparkles size={18} color="#0B0716" />}
           </Pressable>
         </View>
 
@@ -146,7 +146,7 @@ export default function ScriptScreen({ project, onBack, onRecord, update }: {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Btn label="Rigenera" variant="ghost" icon={<RefreshCw size={17} color={colors.text} />} onPress={regenerate} loading={regenerating} style={{ flex: 1 }} />
-          <Btn label="Registra" icon={<Mic size={18} color="#fff" />} onPress={() => onRecord(draft)} style={{ flex: 1.4 }} />
+          <Btn label="Registra" icon={<Mic size={18} color="#0B0716" />} onPress={() => onRecord(draft)} style={{ flex: 1.4 }} />
         </View>
       </ScrollView>
     </Screen>

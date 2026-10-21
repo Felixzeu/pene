@@ -1,16 +1,28 @@
-// Tema scuro "creator studio": carbone profondo, rosso segnale (REC) e ambra caldo.
+// Tema "Neon": quasi nero con riflessi viola, rosa e viola come accenti (in gradiente
+// sui pulsanti principali), titoli in Space Grotesk.
 export const colors = {
-  bg: '#0B0A0E',
-  surface: '#15131B',
-  surfaceAlt: '#1E1B26',
-  border: '#2A2733',
-  text: '#F5F3EE',
-  textDim: '#9B97A6',
-  accent: '#FF3B5C',
-  accentSoft: 'rgba(255,59,92,0.14)',
-  warm: '#FFB443',
-  ok: '#3DDC84',
-  err: '#FF6B6B',
+  bg: '#07060D',
+  surface: '#110F1D',
+  surfaceAlt: '#1A1730',
+  border: '#2A2540',
+  text: '#F4F1FF',
+  textDim: '#A59DC4',
+  accent: '#FF5CC8',
+  accent2: '#A15CFF',
+  accentSoft: 'rgba(255,92,200,0.14)',
+  warm: '#FFD66B',
+  ok: '#7CFFCB',
+  err: '#FF6B8B',
+  onAccent: '#0B0716', // testo sopra rosa/viola/giallo
+} as const;
+
+/** Gradiente dei pulsanti principali e delle card in evidenza. */
+export const gradient = [colors.accent, colors.accent2] as const;
+
+export const fonts = {
+  display: 'SpaceGrotesk_700Bold',
+  semibold: 'SpaceGrotesk_600SemiBold',
+  medium: 'SpaceGrotesk_500Medium',
 } as const;
 
 export const radius = { sm: 10, md: 16, lg: 22, full: 999 } as const;

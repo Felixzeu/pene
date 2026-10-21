@@ -83,7 +83,7 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
         </Field>
         <Btn
           label="Genera script"
-          icon={<Sparkles size={18} color="#fff" />}
+          icon={<Sparkles size={18} color="#0B0716" />}
           onPress={submit}
           loading={loading}
           style={{ marginTop: 8 }}

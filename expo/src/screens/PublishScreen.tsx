@@ -200,7 +200,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
           <Btn
             label={pending.length ? `Pubblica (${pending.length})` : 'Pubblicato'}
-            icon={<Send size={17} color="#fff" />}
+            icon={<Send size={17} color="#0B0716" />}
             onPress={() => publish(pending)}
             loading={busy.length > 0}
             disabled={pending.length === 0 || !project.jobId}

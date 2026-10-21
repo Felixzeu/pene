@@ -193,7 +193,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         <Btn
           label="Applica con l'IA"
           variant="warm"
-          icon={<Sparkles size={17} color="#221704" />}
+          icon={<Sparkles size={17} color="#0B0716" />}
           onPress={askAi}
           loading={aiBusy}
           disabled={busy || instruction.trim().length < 3}
@@ -271,7 +271,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
           <Btn label="Fatto" variant="ghost" onPress={() => onDone({ ...project, finalVideoUrl: job?.finalVideoUrl ?? project.finalVideoUrl })} disabled={busy} style={{ flex: 1 }} />
           <Btn
             label="Applica modifiche"
-            icon={<Wand2 size={17} color="#fff" />}
+            icon={<Wand2 size={17} color="#0B0716" />}
             onPress={() => render(spec)}
             loading={rendering}
             disabled={busy || !dirty}

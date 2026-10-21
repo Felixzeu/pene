@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts, SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import HomeScreen from './src/screens/HomeScreen';
 import NewVideoScreen from './src/screens/NewVideoScreen';
 import ScriptScreen from './src/screens/ScriptScreen';
@@ -33,6 +34,8 @@ export default function App() {
   const [stack, setStack] = useState<Route[]>([{ name: 'home' }]);
   const fade = useRef(new Animated.Value(1)).current;
   const current = stack[stack.length - 1];
+  // Font dei titoli (stile Neon); finché non sono caricati si vede solo lo sfondo.
+  const [fontsReady] = useFonts({ SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold });
 
   const push = useCallback((r: Route) => {
     fade.setValue(0);
@@ -44,6 +47,8 @@ export default function App() {
   const toHome = useCallback(() => setStack([{ name: 'home' }]), []);
 
   const save = useCallback(async (p: Project) => { await upsertProject(p); }, []);
+
+  if (!fontsReady) return <View style={styles.root} />;
 
   return (
     <SafeAreaProvider>

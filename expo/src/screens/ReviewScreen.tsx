@@ -52,7 +52,7 @@ export default function ReviewScreen({ project, onBack, onEdit }: {
         {uploadPct === null ? (
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
             <Btn label="Rifai" variant="ghost" icon={<RotateCcw size={17} color={colors.text} />} onPress={onBack} style={{ flex: 1 }} />
-            <Btn label="Monta il video" icon={<Film size={18} color="#fff" />} onPress={mount} style={{ flex: 1.6 }} />
+            <Btn label="Monta il video" icon={<Film size={18} color="#0B0716" />} onPress={mount} style={{ flex: 1.6 }} />
           </View>
         ) : (
           <View style={{ marginTop: 26 }}>
