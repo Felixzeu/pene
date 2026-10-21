@@ -52,6 +52,17 @@ function ff(args: string[]): Promise<string> {
   });
 }
 
+/** True se il file contiene almeno una traccia audio. */
+export function hasAudioStream(file: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-i', file]);
+    let stderr = '';
+    p.stderr.on('data', (d) => { stderr += String(d); });
+    p.on('error', () => resolve(true));
+    p.on('close', () => resolve(/Stream #\d+:\d+.*: Audio:/.test(stderr)));
+  });
+}
+
 /** Durata in secondi letta dall'intestazione del file (senza decodificarlo). */
 export function probeDuration(file: string): Promise<number | undefined> {
   return new Promise((resolve) => {

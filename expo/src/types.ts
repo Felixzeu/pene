@@ -64,6 +64,7 @@ export interface Job {
   stage: JobStage;
   progress: number; // 0..1
   message?: string;
+  warning?: string;   // es. video registrato senza audio
   finalVideoUrl?: string;
   previewUrl?: string; // video tagliato senza sottotitoli incollati, per l'anteprima live
   words?: Word[];      // timeline delle parole per i sottotitoli in tempo reale

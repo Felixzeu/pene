@@ -6,7 +6,7 @@ import { AppError, ERR } from './errors';
 import { registerTask } from './queue';
 import type { Job } from './queue';
 import { transcribe, type Word } from './whisper';
-import { defaultSpec, probeDuration, renderFinal } from './render';
+import { defaultSpec, hasAudioStream, probeDuration, renderFinal } from './render';
 
 // Pipeline di montaggio, 100% open source e in locale:
 //  1. audio → WAV per Whisper, trascrizione con timestamp per parola
@@ -59,6 +59,24 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const work = path.join(paths.tmp, job.jobId);
   await fs.mkdir(work, { recursive: true });
 
+  // Video senza traccia audio (es. microfono non attivo): niente trascrizione né taglio
+  // dei silenzi, ma il video si può comunque montare con testi e media.
+  if (!(await hasAudioStream(job.rawPath))) {
+    report('editing', 0.4, 'Il video non ha audio: lo preparo senza sottotitoli…');
+    const silentOut = path.join(work, 'clean.mp4');
+    await ff(
+      '-i', job.rawPath,
+      '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+      '-map', '0:v:0', '-map', '1:a', '-shortest',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac',
+      silentOut,
+    );
+    job.warning = 'Il video registrato non ha audio, quindi non ci sono sottotitoli né tagli dei silenzi. Controlla in Impostazioni › Expo Go che il Microfono sia attivo e riprova la registrazione.';
+    job.words = [];
+    await finish(job, silentOut, report);
+    return;
+  }
+
   report('transcribing', 0.05, 'Estrazione dell audio…');
   const audio = path.join(work, 'audio.wav');
   await ff('-i', job.rawPath, '-vn', '-ac', '1', '-ar', '16000', audio);
@@ -87,6 +105,11 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const cleanOut = path.join(work, 'clean.mp4');
   await ff('-i', cutOut, '-af', 'afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'copy', cleanOut);
 
+  job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
+  await finish(job, cleanOut, report);
+}
+
+async function finish(job: Job, cleanOut: string, report: (s: 'transcribing' | 'editing', p: number, m?: string) => void): Promise<void> {
   // 3. Anteprima live: copiamo il video già tagliato e ripulito PRIMA di incollare
   // i sottotitoli. L'app lo riproduce e sovrappone i sottotitoli in tempo reale
   // usando la timeline delle parole rimappata sul video tagliato.
@@ -94,7 +117,6 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const previewPath = path.join(paths.videos, `${job.jobId}-preview.mp4`);
   await fs.copyFile(cleanOut, previewPath);
   job.previewUrl = `/media/${encodeURIComponent(job.jobId)}-preview.mp4`;
-  job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
 
   // 4. Sottotitoli con parola evidenziata, incollati nel video (stesso export usato dalle modifiche).
   // La sorgente delle modifiche è l'anteprima: resta in public/videos per 24 ore, tmp solo 2.

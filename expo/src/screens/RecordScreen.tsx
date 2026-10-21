@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Vi
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as KeepAwake from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
+import { setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio';
 import {
   Camera as CameraFlip, FlipHorizontal2, Gauge, Minus, Plus, Square, Type as TypeIcon, X,
 } from 'lucide-react-native';
@@ -44,6 +45,16 @@ export default function RecordScreen({ project, onClose, onDone }: {
     }
   }, [permission?.granted, micPermission?.status]);
   KeepAwake.useKeepAwake();
+
+  // I player video (expo-video) lasciano la sessione audio di iOS in sola riproduzione:
+  // così la fotocamera registrerebbe un video senza audio. Va rimessa in "registrazione".
+  const enableMic = async () => {
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await setIsAudioActiveAsync(true);
+    } catch { /* se fallisce, il backend avvisa che manca l'audio */ }
+  };
+  useEffect(() => { enableMic(); }, []);
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -120,6 +131,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
   // è lì che arriva il file da passare alla revisione.
   const startRecording = async () => {
     try {
+      await enableMic();
       setRecording(true);
       const res = await cameraRef.current?.recordAsync({ maxDuration: 300 });
       setRecording(false);

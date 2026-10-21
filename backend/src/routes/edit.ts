@@ -58,6 +58,7 @@ editRouter.get('/:jobId', (req, res) => {
     stage: job.stage,
     progress: job.progress,
     message: job.message,
+    warning: job.warning,
     finalVideoUrl: job.finalVideoUrl ? `${job.finalVideoUrl}` : undefined,
     previewUrl: job.previewUrl ? `${job.previewUrl}` : undefined,
     words: job.stage === 'ready' || job.previewUrl ? job.words : undefined,

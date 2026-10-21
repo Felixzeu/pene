@@ -184,6 +184,13 @@ export default function EditScreen({ project, onBack, onReady, onModify, onHome 
           </View>
         )}
 
+        {finalUrl && job?.warning && (
+          <View style={[steps.errorBox, { backgroundColor: 'rgba(255,180,67,0.12)' }]}>
+            <AlertTriangle size={18} color={colors.warm} />
+            <Text style={[steps.errorText, { color: colors.warm }]}>{job.warning}</Text>
+          </View>
+        )}
+
         {errorMsg && (
           <View style={steps.errorBox}>
             <AlertTriangle size={18} color={colors.err} />

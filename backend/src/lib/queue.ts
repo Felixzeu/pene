@@ -13,6 +13,7 @@ export interface Job {
   stage: JobStage;
   progress: number; // 0..1
   message?: string;
+  warning?: string;      // avviso da mostrare a montaggio finito (es. video senza audio)
   finalVideoUrl?: string;
   previewUrl?: string;   // video già tagliato (senza sottotitoli incollati) per l'anteprima live
   words?: Word[];        // timeline delle parole rimappata sul video tagliato
