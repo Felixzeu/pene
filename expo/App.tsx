@@ -10,6 +10,7 @@ import ReviewScreen from './src/screens/ReviewScreen';
 import EditScreen from './src/screens/EditScreen';
 import PublishScreen from './src/screens/PublishScreen';
 import ModifyScreen from './src/screens/ModifyScreen';
+import ReportScreen from './src/screens/ReportScreen';
 import { upsertProject } from './src/services/history';
 import type { Project } from './src/types';
 import { colors } from './src/theme';
@@ -22,7 +23,8 @@ type Route =
   | { name: 'review'; project: Project }
   | { name: 'edit'; project: Project }
   | { name: 'publish'; project: Project }
-  | { name: 'modify'; project: Project };
+  | { name: 'modify'; project: Project }
+  | { name: 'report' };
 
 // Stack navigator minimale con transizione di entrata: le schermate sono un
 // flusso lineare (idea → script → registrazione → montaggio → pubblicazione),
@@ -50,6 +52,7 @@ export default function App() {
         {current.name === 'home' && (
           <HomeScreen
             onNew={() => push({ name: 'new' })}
+            onReport={() => push({ name: 'report' })}
             onResume={(p) => {
               // Riprende il progetto dal punto in cui si era fermato.
               if (p.published?.length || p.finalVideoUrl) push({ name: 'publish', project: p });
@@ -60,6 +63,8 @@ export default function App() {
             }}
           />
         )}
+
+        {current.name === 'report' && <ReportScreen onBack={pop} />}
 
         {current.name === 'new' && (
           <NewVideoScreen

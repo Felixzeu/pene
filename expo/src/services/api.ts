@@ -164,3 +164,18 @@ export const linkedProviders = () =>
 
 /** URL da aprire nel browser per collegare un social (OAuth2). */
 export const authUrl = (provider: ProviderId) => `${API_URL}/api/auth/${provider}`;
+
+/** Modmail & bug report, con screenshot facoltativo. */
+export async function sendReport(r: {
+  kind: 'bug' | 'idea' | 'message'; text: string; contact?: string; device?: string; appVersion?: string;
+  screenshot?: { uri: string; name: string; type: string };
+}): Promise<void> {
+  const form = new FormData();
+  form.append('kind', r.kind);
+  form.append('text', r.text);
+  if (r.contact) form.append('contact', r.contact);
+  if (r.device) form.append('device', r.device);
+  if (r.appVersion) form.append('appVersion', r.appVersion);
+  if (r.screenshot) form.append('screenshot', r.screenshot as unknown as Blob);
+  await request<{ ok: boolean }>('/api/report', { method: 'POST', body: form }, 60000);
+}

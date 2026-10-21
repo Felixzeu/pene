@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Clapperboard, Plus, Trash2, Video } from 'lucide-react-native';
+import { Clapperboard, MessageSquareWarning, Plus, Trash2, Video } from 'lucide-react-native';
 import { Badge, Btn, Screen } from '../components/ui';
 import { colors, radius } from '../theme';
 import { loadHistory, removeProject } from '../services/history';
@@ -23,8 +23,9 @@ function stageOf(p: Project): string {
   return STAGE_LABEL.script;
 }
 
-export default function HomeScreen({ onNew, onResume }: {
+export default function HomeScreen({ onNew, onResume, onReport }: {
   onNew: () => void;
+  onReport: () => void;
   onResume: (p: Project) => void;
 }) {
   const [history, setHistory] = useState<Project[]>([]);
@@ -59,6 +60,14 @@ export default function HomeScreen({ onNew, onResume }: {
         icon={<Plus size={20} color="#fff" />}
         onPress={onNew}
         style={{ marginHorizontal: 20 }}
+      />
+
+      <Btn
+        label="Modmail & bug report"
+        variant="ghost"
+        icon={<MessageSquareWarning size={18} color={colors.text} />}
+        onPress={onReport}
+        style={{ marginHorizontal: 20, marginTop: 10 }}
       />
 
       <Text style={styles.sectionTitle}>Cronologia</Text>

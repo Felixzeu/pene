@@ -11,6 +11,7 @@ import { scriptRouter } from './routes/script';
 import { editRouter } from './routes/edit';
 import { publishRouter } from './routes/publish';
 import { authRouter } from './routes/auth';
+import { reportRouter } from './routes/report';
 import { AppError, ERR } from './lib/errors';
 import './lib/ffmpeg'; // registra la pipeline di montaggio sulla coda
 
@@ -43,6 +44,7 @@ app.use('/api/script', scriptRouter);
 app.use('/api/edit', editRouter);
 app.use('/api/publish', publishRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/report', reportRouter);
 
 // Error handler centrale: messaggi sempre in italiano, log su stderr.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
