@@ -1,0 +1,28 @@
+{
+  "name": "creatorprompt",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "~2.2.0",
+    "expo": "~58.0.16",
+    "expo-camera": "~58.0.11",
+    "expo-haptics": "~58.0.7",
+    "expo-keep-awake": "~58.0.3",
+    "expo-status-bar": "~58.0.3",
+    "expo-video": "~58.0.12",
+    "lucide-react-native": "~1.60.0",
+    "react": "19.3.1",
+    "react-native": "0.88.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-svg": "~15.16.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "typescript": "~5.9.3"
+  },
+  "private": true
+}
