@@ -82,8 +82,14 @@ export function uploadForEdit(
   });
 }
 
-export const getJob = (jobId: string) =>
-  request<Job>(`/api/edit/${encodeURIComponent(jobId)}`, {}, 15000);
+// Il backend restituisce percorsi relativi (/media/...): il player sul telefono
+// ha bisogno dell'URL completo del backend.
+export const mediaUrl = (u?: string) => (u && u.startsWith('/') ? `${API_URL}${u}` : u);
+
+export const getJob = async (jobId: string) => {
+  const j = await request<Job>(`/api/edit/${encodeURIComponent(jobId)}`, {}, 15000);
+  return { ...j, finalVideoUrl: mediaUrl(j.finalVideoUrl), previewUrl: mediaUrl(j.previewUrl) };
+};
 
 export interface PublishRequest {
   jobId: string;

@@ -1,8 +1,6 @@
 import { Router } from 'express';
-import { promises as fs } from 'fs';
-import path from 'path';
 import { z } from 'zod';
-import { config, paths } from '../lib/config-bridge';
+import { config } from '../lib/config-bridge';
 import { getJob } from '../lib/queue';
 import { publishTo } from '../publishers';
 import { AppError, ERR } from '../lib/errors';
@@ -50,9 +48,8 @@ publishRouter.post('/', async (req, res, next) => {
       }),
     );
 
-    // Il link temporaneo può essere rimosso dopo la pubblicazione (finale + anteprima live).
-    fs.rm(job.finalPath, { force: true }).catch(() => { /* già rimosso */ });
-    fs.rm(path.join(paths.videos, `${job.jobId}-preview.mp4`), { force: true }).catch(() => { /* già rimosso */ });
+    // Il video resta su disco per permettere "Riprova" o altri social:
+    // la pulizia periodica in index.ts lo rimuove dopo 24 ore.
 
     res.json({ results });
   } catch (e) {

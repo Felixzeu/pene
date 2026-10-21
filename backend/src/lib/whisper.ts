@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { readFileSync } from 'fs';
 import { config } from '../config';
 import { AppError, ERR } from './errors';
 
@@ -29,8 +30,8 @@ export function transcribe(audioPath: string, language: string): Promise<Transcr
         return;
       }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const json = require(`${outBase}.json`) as {
+        // Lettura da disco (non require: il percorso è relativo e require lo cercherebbe in node_modules).
+        const json = JSON.parse(readFileSync(`${outBase}.json`, 'utf8')) as {
           transcription?: { segments?: { text: string; offsets?: { from: number; to: number }; timestamps?: { from: string; to: string } }[] };
         };
         const segs = json.transcription?.segments ?? [];

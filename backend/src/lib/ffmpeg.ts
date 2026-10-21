@@ -50,12 +50,16 @@ function keepRanges(words: Word[], minSilenceSec: number): Array<{ from: number;
 
 /** Rimappa un tempo del video originale sul timeline tagliato. */
 function remap(t: number, ranges: Array<{ from: number; to: number }>): number {
-  let out = t;
+  // Somma la durata dei pezzi tenuti prima di t, più la parte del pezzo in cui cade t.
+  let out = 0;
   for (const r of ranges) {
-    if (t >= r.to) out -= r.to - r.from;
-    else break;
+    if (t >= r.to) out += r.to - r.from;
+    else {
+      if (t > r.from) out += t - r.from;
+      break;
+    }
   }
-  return Math.max(0, out);
+  return out;
 }
 
 /** Genera i sottotitoli .ass con la parola corrente evidenziata. */

@@ -4,7 +4,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { AlertTriangle, CheckCircle2, Loader2, Share2, Sparkles, Subtitles, Wand2, Zap } from 'lucide-react-native';
 import { Badge, Btn, Header, Screen } from '../components/ui';
 import { colors, radius } from '../theme';
-import { getJob } from '../services/api';
+import { getJob, uploadForEdit } from '../services/api';
 import { upsertProject } from '../services/history';
 import type { Job, Project, Word } from '../types';
 
@@ -27,10 +27,12 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
   onReady: (p: Project) => void;
   onHome: () => void;
 }) {
+  const [jobId, setJobId] = useState(project.jobId);
   const [job, setJob] = useState<Job | null>(
     project.jobId ? { jobId: project.jobId, stage: 'queued', progress: 0.1 } : null,
   );
   const [failed, setFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const stopRef = useRef(false);
   const finalUrl = job?.finalVideoUrl;
   const previewUrl = job?.previewUrl;
@@ -42,12 +44,12 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
   );
 
   useEffect(() => {
-    if (!project.jobId) return;
+    if (!jobId) return;
     stopRef.current = false;
     const poll = async () => {
       while (!stopRef.current) {
         try {
-          const j = await getJob(project.jobId as string);
+          const j = await getJob(jobId);
           setJob(j);
           if (j.stage === 'ready' || j.stage === 'error') {
             if (j.stage === 'error') setFailed(true);
@@ -61,7 +63,7 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
     };
     poll();
     return () => { stopRef.current = true; };
-  }, [project.jobId]);
+  }, [jobId]);
 
   // Autoplay sia dell'anteprima live che del video finale.
   useEffect(() => {
@@ -85,12 +87,29 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
   // Quando il job è pronto salviamo il risultato nella cronologia.
   useEffect(() => {
     if (finalUrl) {
-      const next = { ...project, finalVideoUrl: finalUrl };
+      const next = { ...project, jobId, finalVideoUrl: finalUrl };
       upsertProject(next);
     }
   }, [finalUrl]);
 
-  if (!project.jobId) return null;
+  // Riprova: ricarica il video grezzo e avvia un nuovo job di montaggio.
+  const retry = async () => {
+    if (!project.rawVideoUri) return;
+    setRetrying(true);
+    try {
+      const { jobId: next } = await uploadForEdit(project.rawVideoUri, project, () => {});
+      upsertProject({ ...project, jobId: next });
+      setFailed(false);
+      setJob({ jobId: next, stage: 'queued', progress: 0.1 });
+      setJobId(next);
+    } catch (e) {
+      setJob((j) => (j ? { ...j, message: e instanceof Error ? e.message : 'Riprova non riuscita.' } : j));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  if (!jobId) return null;
 
   const current = job ? STEP_ORDER[job.stage] ?? 0 : 0;
   const errorMsg = failed ? job?.message ?? 'Il montaggio è fallito. Riprova.' : null;
@@ -175,7 +194,7 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
           {finalUrl ? (
             <>
               <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
-              <Btn label="Pubblica" icon={<Share2 size={17} color="#fff" />} onPress={() => onReady({ ...project, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
+              <Btn label="Pubblica" icon={<Share2 size={17} color="#fff" />} onPress={() => onReady({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
             </>
           ) : (
             <>
@@ -184,8 +203,9 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
                 label="Riprova montaggio"
                 variant="warm"
                 icon={<Sparkles size={17} color="#221704" />}
-                onPress={() => { setFailed(false); stopRef.current = true; }}
-                disabled={!failed}
+                onPress={retry}
+                loading={retrying}
+                disabled={!failed || !project.rawVideoUri}
                 style={{ flex: 1.6 }}
               />
             </>
