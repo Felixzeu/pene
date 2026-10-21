@@ -2,22 +2,46 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypt
 import { promises as fs } from 'fs';
 import path from 'path';
 import { config, paths } from '../config';
+import { currentUser } from './user';
 
 // Token OAuth cifrati a riposo (AES-256-GCM) su disco. Mai nell'app, mai in chiaro.
+// Ogni utente ha i suoi social: il file è { users: { <idUtente>: { <social>: token } } }.
 
-interface TokenStore { [provider: string]: { encrypted: string; iv: string; tag: string } }
+type Enc = { encrypted: string; iv: string; tag: string };
+interface TokenStore { [provider: string]: Enc }
+interface TokenFile { users: Record<string, TokenStore> }
 
-async function read(): Promise<TokenStore> {
+async function readFile(): Promise<TokenFile> {
   try {
-    return JSON.parse(await fs.readFile(paths.tokens, 'utf8')) as TokenStore;
+    const raw = JSON.parse(await fs.readFile(paths.tokens, 'utf8')) as Partial<TokenFile> & TokenStore;
+    if (raw.users) return { users: raw.users as Record<string, TokenStore> };
+    // Vecchio formato (un solo utente): diventa l'utente "local".
+    return { users: { local: raw as TokenStore } };
   } catch {
-    return {};
+    return { users: {} };
   }
 }
 
-async function write(store: TokenStore): Promise<void> {
+async function writeFile(f: TokenFile): Promise<void> {
   await fs.mkdir(path.dirname(paths.tokens), { recursive: true });
-  await fs.writeFile(paths.tokens, JSON.stringify(store, null, 2), { mode: 0o600 });
+  await fs.writeFile(paths.tokens, JSON.stringify(f, null, 2), { mode: 0o600 });
+}
+
+async function read(): Promise<TokenStore> {
+  return (await readFile()).users[currentUser().id] ?? {};
+}
+
+async function write(store: TokenStore): Promise<void> {
+  const f = await readFile();
+  f.users[currentUser().id] = store;
+  await writeFile(f);
+}
+
+/** Cancella tutti i social collegati dell'utente attuale (eliminazione account). */
+export async function removeAllTokens(): Promise<void> {
+  const f = await readFile();
+  delete f.users[currentUser().id];
+  await writeFile(f);
 }
 
 function key(): Buffer {

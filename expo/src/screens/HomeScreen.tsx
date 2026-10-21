@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Alert, Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Clapperboard, MessageSquareWarning, Pencil, Plus, Trash2, Video } from 'lucide-react-native';
+import { Clapperboard, MessageSquareWarning, Pencil, Plus, Trash2, UserRound, Video } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '../components/ui';
 import { colors, fonts, gradient } from '../theme';
@@ -79,11 +79,12 @@ function SwipeRow({ onPress, onDelete, onEdit, onSwipe, children }: {
   );
 }
 
-export default function HomeScreen({ onNew, onResume, onModify, onReport }: {
+export default function HomeScreen({ onNew, onResume, onModify, onReport, onAccount }: {
   onNew: () => void;
   onResume: (p: Project) => void;
   onModify: (p: Project) => void;
   onReport: () => void;
+  onAccount?: () => void;
 }) {
   const [history, setHistory] = useState<Project[]>([]);
   const [swiping, setSwiping] = useState(false);
@@ -111,9 +112,16 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport }: {
     <View>
       <View style={styles.top}>
         <Text style={styles.logo}>viral<Text style={{ color: colors.accent2 }}>.</Text></Text>
-        <Pressable onPress={onReport} style={styles.iconBtn} accessibilityLabel="Modmail e bug report" hitSlop={6}>
-          <MessageSquareWarning size={19} color={colors.text} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable onPress={onReport} style={styles.iconBtn} accessibilityLabel="Modmail e bug report" hitSlop={6}>
+            <MessageSquareWarning size={19} color={colors.text} />
+          </Pressable>
+          {onAccount && (
+            <Pressable onPress={onAccount} style={styles.iconBtn} accessibilityLabel="Account" hitSlop={6}>
+              <UserRound size={19} color={colors.text} />
+            </Pressable>
+          )}
+        </View>
       </View>
       <Text style={styles.heroTitle}>Fai il prossimo{'\n'}video <Text style={{ color: colors.accent2 }}>virale</Text>.</Text>
 

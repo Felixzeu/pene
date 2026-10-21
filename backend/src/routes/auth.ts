@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { config } from '../config';
 import { isLinked, loadToken, removeToken, saveToken } from '../lib/tokens';
 import { AppError, ERR } from '../lib/errors';
+import { accountsEnabled, requireUser, runAs, currentUser, type User } from '../lib/user';
 
 // OAuth2 per i social. L'app apre la pagina di consenso nel browser;
 // il token arriva qui in callback e viene salvato cifrato. Mai password.
@@ -11,10 +12,14 @@ import { AppError, ERR } from '../lib/errors';
 type Provider = 'youtube' | 'instagram' | 'facebook' | 'tiktok';
 
 // Stato anti-CSRF in memoria (sessioni di 10 minuti).
-const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number; returnTo?: string }>();
+const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number; returnTo?: string; user: User }>();
+// Biglietti monouso: l'app (che ha il login) ne chiede uno e apre il browser con quello,
+// così il social collegato finisce sull'account giusto senza mettere il token nell'URL.
+const tickets = new Map<string, { user: User; createdAt: number }>();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of pending) if (now - v.createdAt > 600000) pending.delete(k);
+  for (const [k, v] of tickets) if (now - v.createdAt > 120000) tickets.delete(k);
 }, 60000).unref();
 
 export const authRouter = Router();
@@ -24,7 +29,14 @@ const page = (msg: string) =>
   `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;background:#0B0A0E;color:#F5F3EE;display:grid;place-items:center;height:100vh;margin:0;padding:24px;text-align:center"><h2>${msg}</h2></body></html>`;
 
 // GET /api/auth/status — quali social sono già collegati (anche se collegati da un altro dispositivo).
-authRouter.get('/status', async (_req, res) => {
+// POST /api/auth/ticket — biglietto monouso (2 minuti) per aprire il login di un social.
+authRouter.post('/ticket', requireUser, (_req, res) => {
+  const ticket = randomBytes(18).toString('base64url');
+  tickets.set(ticket, { user: currentUser(), createdAt: Date.now() });
+  res.json({ ticket });
+});
+
+authRouter.get('/status', requireUser, async (_req, res) => {
   const providers: Provider[] = ['youtube', 'instagram', 'facebook', 'tiktok'];
   const entries = await Promise.all(providers.map(async (p) => [p, await isLinked(p)] as const));
   res.json(Object.fromEntries(entries));
@@ -44,6 +56,18 @@ authRouter.get('/:provider', (req, res) => {
   const ret = typeof req.query.return === 'string' && RETURN_OK.test(req.query.return) ? req.query.return : undefined;
   const o = config.oauth;
 
+  // Con gli account attivi serve il biglietto chiesto dall'app (chi sta collegando il social?).
+  let user: User = { id: 'local' };
+  if (accountsEnabled()) {
+    const t = typeof req.query.ticket === 'string' ? tickets.get(req.query.ticket) : undefined;
+    if (!t) {
+      res.status(401).send(page('Apri il collegamento dall\'app viral (Pubblica → Collega): il link è valido 2 minuti.'));
+      return;
+    }
+    tickets.delete(req.query.ticket as string);
+    user = t.user;
+  }
+
   // Chiavi mancanti: meglio un messaggio chiaro qui che un errore criptico del social.
   const keyName = { youtube: 'YOUTUBE_CLIENT_ID', instagram: 'META_APP_ID', facebook: 'META_APP_ID', tiktok: 'TIKTOK_CLIENT_KEY' }[provider];
   const keyValue = provider === 'tiktok' ? o.tiktok.clientKey : o[provider]?.clientId;
@@ -57,7 +81,7 @@ authRouter.get('/:provider', (req, res) => {
   }
 
   if (provider === 'youtube') {
-    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret, user });
     const url = 'https://accounts.google.com/o/oauth2/v2/auth' +
       `?client_id=${o.youtube.clientId}&redirect_uri=${encodeURIComponent(o.youtube.redirect)}` +
       '&response_type=code&access_type=offline&prompt=consent' +
@@ -68,7 +92,7 @@ authRouter.get('/:provider', (req, res) => {
 
   if (provider === 'instagram' || provider === 'facebook') {
     const cfg = provider === 'instagram' ? o.instagram : o.facebook;
-    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret, user });
     const url = 'https://www.facebook.com/v21.0/dialog/oauth' +
       `?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(cfg.redirect)}` +
       `&scope=${encodeURIComponent(cfg.scope)}&state=${state}&response_type=code` +
@@ -80,7 +104,7 @@ authRouter.get('/:provider', (req, res) => {
   if (provider === 'tiktok') {
     // App "Web" di TikTok: niente PKCE (è solo per app desktop/mobile, e con un
     // code_challenge non atteso TikTok mostra "Page not available"). Basta il client_secret.
-    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret, user });
     const url = 'https://www.tiktok.com/v2/auth/authorize/' +
       `?client_key=${encodeURIComponent(o.tiktok.clientKey)}&response_type=code` +
       `&scope=${encodeURIComponent(o.tiktok.scope)}` +
@@ -176,11 +200,12 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
     returnTo = sess.returnTo;
     const reply = (ok: boolean, msg: string) => (returnTo ? backToApp(res, returnTo, provider, ok, msg) : res.send(page(msg)));
 
-    await exchangeCode(provider, code);
+    // Il token va salvato sull'account che ha aperto il login.
+    await runAs(sess.user, () => exchangeCode(provider, code));
 
     // Meta: controlla subito che la Pagina (e l'account Instagram) siano stati condivisi.
     if (provider === 'instagram' || provider === 'facebook') {
-      const { accessToken } = await loadToken(provider);
+      const { accessToken } = await runAs(sess.user, () => loadToken(provider));
       const pages = await listPages(accessToken, provider).catch(() => []);
       const ig = pages.find((p) => p.instagram_business_account?.id);
       if (pages.length === 0) { reply(false, `Accesso fatto, ma ${NO_PAGE_HINT}`); return; }
@@ -205,7 +230,7 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
 });
 
 // DELETE /api/auth/:provider — scollega il social.
-authRouter.delete('/:provider', async (req, res, next) => {
+authRouter.delete('/:provider', requireUser, async (req, res, next) => {
   try {
     const provider = req.params.provider;
     if (!['youtube', 'instagram', 'facebook', 'tiktok'].includes(provider)) throw new AppError(ERR.badProvider, 400);

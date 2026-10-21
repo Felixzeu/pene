@@ -1,7 +1,29 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Project } from '../types';
 
-const KEY = 'creatorprompt.history.v1';
+const BASE = 'creatorprompt.history.v1';
+let KEY = BASE;
+
+/**
+ * Ogni account ha la sua cronologia sul telefono. Al primo login, i progetti fatti
+ * prima degli account passano a quell'account (così non si perde niente).
+ */
+export async function setHistoryUser(userId: string | null): Promise<void> {
+  KEY = userId ? `${BASE}.${userId}` : BASE;
+  if (!userId) return;
+  try {
+    const [mine, old] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(BASE)]);
+    if (!mine && old) {
+      await AsyncStorage.setItem(KEY, old);
+      await AsyncStorage.removeItem(BASE);
+    }
+  } catch { /* non bloccare il login */ }
+}
+
+/** Cancella la cronologia dell'account attuale (eliminazione account). */
+export async function clearHistory(): Promise<void> {
+  await AsyncStorage.removeItem(KEY).catch(() => {});
+}
 
 /** Cronologia locale dei progetti, salvata in AsyncStorage (gratuito, offline). */
 export async function loadHistory(): Promise<Project[]> {

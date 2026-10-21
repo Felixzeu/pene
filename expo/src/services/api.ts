@@ -1,4 +1,5 @@
 import { API_URL, type ProviderId } from '../config';
+import { authHeaders } from './auth';
 import type { EditSpec, Job, MediaItem, Project, PublishOutcome, PublishSettings, ScriptParams, ScriptResult } from '../types';
 
 // Client API verso il backend. Tutti gli errori arrivano già in italiano dal server;
@@ -10,7 +11,11 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 60000): 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API_URL}${path}`, { ...init, signal: ctrl.signal });
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { ...(init?.headers as Record<string, string> | undefined), ...authHeaders() },
+      signal: ctrl.signal,
+    });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new ApiError((body as { error?: string }).error ?? `Errore del server (${res.status})`);
@@ -73,6 +78,7 @@ export function uploadForEdit(
       form.append('hashtags', JSON.stringify(meta.scriptResult.hashtags));
     }
     xhr.open('POST', `${API_URL}/api/edit`);
+    for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -110,6 +116,7 @@ export function uploadMedia(
     const form = new FormData();
     form.append('file', file as unknown as Blob);
     xhr.open('POST', `${API_URL}/api/edit/${encodeURIComponent(jobId)}/media`);
+    for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -129,8 +136,11 @@ export function uploadMedia(
 
 /** L'IA trasforma una richiesta a parole in modifiche (non applicate finché non si fa renderEdit). */
 /** Indirizzo di un media caricato, per l'anteprima live. */
-export const jobMediaUrl = (jobId: string, mediaId: string, cutout = false) =>
-  `${API_URL}/api/edit/${encodeURIComponent(jobId)}/media/${encodeURIComponent(mediaId)}${cutout ? '?cutout=1' : ''}`;
+/** Sorgente per <Image> di un media del montaggio (col login nell'header). */
+export const jobMediaSource = (jobId: string, mediaId: string, cutout = false) => ({
+  uri: `${API_URL}/api/edit/${encodeURIComponent(jobId)}/media/${encodeURIComponent(mediaId)}${cutout ? '?cutout=1' : ''}`,
+  headers: authHeaders(),
+});
 
 export const aiEdit = (jobId: string, instruction: string, spec: EditSpec) =>
   request<{ spec: EditSpec; summary: string; media?: MediaItem[] }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
@@ -168,7 +178,15 @@ export const linkedProviders = () =>
   request<Record<ProviderId, boolean>>('/api/auth/status', {}, 15000);
 
 /** URL da aprire nel browser per collegare un social (OAuth2). */
-export const authUrl = (provider: ProviderId) => `${API_URL}/api/auth/${provider}`;
+/** Link per collegare un social: con gli account attivi include un biglietto monouso. */
+export async function authUrl(provider: ProviderId, returnTo: string): Promise<string> {
+  const base = `${API_URL}/api/auth/${provider}?return=${encodeURIComponent(returnTo)}`;
+  if (!authHeaders().Authorization) return base;
+  const { ticket } = await request<{ ticket: string }>('/api/auth/ticket', { method: 'POST' }, 15000);
+  return `${base}&ticket=${encodeURIComponent(ticket)}`;
+}
+
+export const deleteAccount = () => request<{ ok: boolean }>('/api/account', { method: 'DELETE' }, 60000);
 
 /** Scollega un social dal backend. */
 export const unlinkProvider = (provider: ProviderId) =>

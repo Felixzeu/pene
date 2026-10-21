@@ -17,6 +17,12 @@ export const config = {
   silenceThresholdDb: process.env.SILENCE_THRESHOLD_DB ?? '-38dB',
   silenceMinMs: process.env.SILENCE_MIN_MS ?? '700',
   encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? '',
+  // Account utenti (Supabase). Senza SUPABASE_URL l'app resta "monoutente" come prima.
+  supabase: {
+    url: (process.env.SUPABASE_URL ?? '').trim().replace(/\/+$/, ''),
+    anonKey: process.env.SUPABASE_ANON_KEY ?? '',
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', // solo per "Elimina account"
+  },
   oauth: {
     youtube: {
       clientId: process.env.YOUTUBE_CLIENT_ID ?? '',

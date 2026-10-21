@@ -88,7 +88,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
   words: Word[];
   media: MediaItem[];
   duration: number;
-  mediaUri: (id: string, cutout: boolean) => string;
+  mediaUri: (id: string, cutout: boolean) => { uri: string; headers?: Record<string, string> };
   /** Foto da spostare: resta visibile e si trascina col dito. */
   selectedId?: string | null;
   onMoveOverlay?: (id: string, x: number, y: number) => void;
@@ -135,7 +135,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
             return m?.kind === 'image' ? (
               <Image
                 key={o.id}
-                source={{ uri: mediaUri(m.id, look.cut) }}
+                source={mediaUri(m.id, look.cut)}
                 style={[pos, b && !look.cut && { borderRadius: 12 * s }]}
                 resizeMode={b ? 'contain' : 'cover'}
               />
@@ -190,7 +190,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
         return (
           <DragBox box={b} s={s} onDrag={onDrag} onMove={(x, y) => onMoveOverlay?.(selected.id, x, y)}>
             {m?.kind === 'image'
-              ? <Image source={{ uri: mediaUri(m.id, look.cut) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+              ? <Image source={mediaUri(m.id, look.cut)} style={StyleSheet.absoluteFill} resizeMode="contain" />
               : <View style={[StyleSheet.absoluteFill, styles.videoBox]}><Text style={styles.videoText}>VIDEO</Text></View>}
           </DragBox>
         );

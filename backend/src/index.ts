@@ -12,6 +12,8 @@ import { editRouter } from './routes/edit';
 import { publishRouter } from './routes/publish';
 import { authRouter } from './routes/auth';
 import { reportRouter } from './routes/report';
+import { accountRouter } from './routes/account';
+import { accountsEnabled, requireUser } from './lib/user';
 import { AppError, ERR } from './lib/errors';
 import './lib/ffmpeg'; // registra la pipeline di montaggio sulla coda
 
@@ -38,13 +40,16 @@ app.use('/media', express.static(path.resolve(paths.videos), {
   setHeaders: (res) => { res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); },
 }));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, provider: config.llmProvider }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, provider: config.llmProvider, accounts: accountsEnabled() }));
 
-app.use('/api/script', scriptRouter);
-app.use('/api/edit', editRouter);
-app.use('/api/publish', publishRouter);
+// Tutto richiede il login (se gli account Supabase sono attivi), tranne i login dei social
+// che si aprono nel browser: quelli usano un biglietto monouso (vedi routes/auth.ts).
+app.use('/api/script', requireUser, scriptRouter);
+app.use('/api/edit', requireUser, editRouter);
+app.use('/api/publish', requireUser, publishRouter);
 app.use('/api/auth', authRouter);
-app.use('/api/report', reportRouter);
+app.use('/api/report', requireUser, reportRouter);
+app.use('/api/account', requireUser, accountRouter);
 
 // Error handler centrale: messaggi sempre in italiano, log su stderr.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

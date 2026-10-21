@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -12,7 +12,10 @@ import EditScreen from './src/screens/EditScreen';
 import PublishScreen from './src/screens/PublishScreen';
 import ModifyScreen from './src/screens/ModifyScreen';
 import ReportScreen from './src/screens/ReportScreen';
-import { upsertProject } from './src/services/history';
+import AuthScreen from './src/screens/AuthScreen';
+import AccountScreen from './src/screens/AccountScreen';
+import { setHistoryUser, upsertProject } from './src/services/history';
+import { accountsEnabled, getSession, onSessionChange } from './src/services/auth';
 import type { Project } from './src/types';
 import { colors } from './src/theme';
 
@@ -25,7 +28,8 @@ type Route =
   | { name: 'edit'; project: Project }
   | { name: 'publish'; project: Project }
   | { name: 'modify'; project: Project }
-  | { name: 'report' };
+  | { name: 'report' }
+  | { name: 'account' };
 
 // Stack navigator minimale con transizione di entrata: le schermate sono un
 // flusso lineare (idea → script → registrazione → montaggio → pubblicazione),
@@ -48,7 +52,31 @@ export default function App() {
 
   const save = useCallback(async (p: Project) => { await upsertProject(p); }, []);
 
-  if (!fontsReady) return <View style={styles.root} />;
+  // Login: senza account Supabase configurati si entra direttamente (modalità solo-tu).
+  const [user, setUser] = useState<{ id: string; email: string | null } | null | undefined>(accountsEnabled ? undefined : null);
+  useEffect(() => {
+    if (!accountsEnabled) return;
+    const apply = async (s: Awaited<ReturnType<typeof getSession>>) => {
+      const u = s?.user ? { id: s.user.id, email: s.user.email ?? null } : null;
+      await setHistoryUser(u?.id ?? null);
+      setUser((prev) => {
+        if (prev?.id !== u?.id) setStack([{ name: 'home' }]); // cambio account: si riparte dalla Home
+        return u;
+      });
+    };
+    getSession().then(apply);
+    return onSessionChange((s) => { apply(s); });
+  }, []);
+
+  if (!fontsReady || user === undefined) return <View style={styles.root} />;
+  if (accountsEnabled && !user) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <View style={styles.root}><AuthScreen /></View>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -58,6 +86,7 @@ export default function App() {
           <HomeScreen
             onNew={() => push({ name: 'new' })}
             onReport={() => push({ name: 'report' })}
+            onAccount={accountsEnabled ? () => push({ name: 'account' }) : undefined}
             onResume={(p) => {
               // Riprende il progetto dal punto in cui si era fermato.
               if (p.published?.length || p.finalVideoUrl) push({ name: 'publish', project: p });
@@ -77,6 +106,7 @@ export default function App() {
         )}
 
         {current.name === 'report' && <ReportScreen onBack={pop} />}
+        {current.name === 'account' && <AccountScreen email={user?.email ?? null} onBack={pop} />}
 
         {current.name === 'new' && (
           <NewVideoScreen

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react-native';
 import { Badge, Btn, ChipRow, Field, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
-import { aiEdit, getJob, jobMediaUrl, renderEdit, uploadMedia } from '../services/api';
+import { aiEdit, getJob, jobMediaSource, renderEdit, uploadMedia } from '../services/api';
 import LivePreview, { overlayLook } from '../components/LivePreview';
 import { overlayBox } from '../lib/stickerLayout';
 import { upsertProject } from '../services/history';
@@ -225,7 +225,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
             words={job?.words ?? []}
             media={job?.media ?? []}
             duration={job?.duration ?? 0}
-            mediaUri={(id, cut) => jobMediaUrl(jobId, id, cut)}
+            mediaUri={(id, cut) => jobMediaSource(jobId, id, cut)}
             selectedId={moving}
             onMoveOverlay={(id, x, y) => patchOverlay(id, { x, y })}
             onDrag={setDragging}

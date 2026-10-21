@@ -55,7 +55,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
     setLinking(id);
     try {
       const ret = ExpoLinking.createURL('auth');
-      const res = await WebBrowser.openAuthSessionAsync(`${authUrl(id)}?return=${encodeURIComponent(ret)}`, ret);
+      const res = await WebBrowser.openAuthSessionAsync(await authUrl(id, ret), ret);
       if (res.type === 'success') {
         const q = ExpoLinking.parse(res.url).queryParams ?? {};
         const ok = q.status === 'ok';
@@ -229,7 +229,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           })}
         </View>
         <Text style={styles.hint}>
-          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell'app e si chiude da solo. Tieni premuto "collegato" per scollegare. Se TikTok non si apre sul telefono, collega dal PC da http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
+          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell'app e si chiude da solo. Tieni premuto "collegato" per scollegare. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
         </Text>
 
         {error && (

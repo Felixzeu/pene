@@ -1,4 +1,7 @@
 import { EventEmitter } from 'events';
+import { randomBytes } from 'crypto';
+import { promises as fs } from 'fs';
+import { currentUser, requestUser, runAs } from './user';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import path from 'path';
 import type { Word } from './whisper';
@@ -12,6 +15,7 @@ export type JobStage = 'queued' | 'transcribing' | 'editing' | 'ready' | 'error'
 export interface Job {
   jobId: string;
   projectId: string;
+  userId?: string;       // proprietario (account Supabase, o "local")
   stage: JobStage;
   progress: number; // 0..1
   message?: string;
@@ -90,7 +94,8 @@ loadJobs();
 
 export function createJob(params: Pick<Job, 'projectId' | 'language' | 'rawPath' | 'title' | 'hashtags'>): Job {
   const job: Job = {
-    jobId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    jobId: `${Date.now().toString(36)}-${randomBytes(9).toString('base64url')}`,
+    userId: currentUser().id,
     stage: 'queued',
     progress: 0,
     ...params,
@@ -113,8 +118,28 @@ export function requeue(job: Job, task: Task): void {
   pump();
 }
 
+/** Il job, ma solo se è dell'utente della richiesta in corso. */
 export function getJob(jobId: string): Job | undefined {
-  return jobs.get(jobId);
+  const job = jobs.get(jobId);
+  const u = requestUser();
+  if (job && u && (job.userId ?? 'local') !== u.id) return undefined;
+  return job;
+}
+
+/** Elimina tutti i job (e i loro file) dell'utente attuale. */
+export async function removeUserJobs(): Promise<number> {
+  const id = currentUser().id;
+  let n = 0;
+  for (const [k, job] of jobs) {
+    if ((job.userId ?? 'local') !== id) continue;
+    for (const f of [job.rawPath, job.sourcePath, job.finalPath, ...(job.media ?? []).flatMap((m) => [m.path, m.cutoutPath])]) {
+      if (f) await fs.rm(f, { force: true }).catch(() => {});
+    }
+    jobs.delete(k);
+    n++;
+  }
+  saveJobs();
+  return n;
 }
 
 function report(job: Job) {
@@ -135,7 +160,8 @@ async function pump() {
   running = true;
   const rep = report(next);
   try {
-    await (entry.task ?? runTask)(next, rep);
+    // Ogni lavoro gira come il suo proprietario, non come chi ha avviato la coda.
+    await runAs({ id: next.userId ?? 'local' }, () => (entry.task ?? runTask)(next, rep));
     next.stage = 'ready';
     next.progress = 1;
     next.version += 1;
