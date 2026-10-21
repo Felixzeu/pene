@@ -128,8 +128,12 @@ export function uploadMedia(
 }
 
 /** L'IA trasforma una richiesta a parole in modifiche (non applicate finché non si fa renderEdit). */
+/** Indirizzo di un media caricato, per l'anteprima live. */
+export const jobMediaUrl = (jobId: string, mediaId: string) =>
+  `${API_URL}/api/edit/${encodeURIComponent(jobId)}/media/${encodeURIComponent(mediaId)}`;
+
 export const aiEdit = (jobId: string, instruction: string, spec: EditSpec) =>
-  request<{ spec: EditSpec; summary: string }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
+  request<{ spec: EditSpec; summary: string; media?: MediaItem[] }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instruction, spec }),

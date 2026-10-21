@@ -42,6 +42,18 @@ export interface OverlayItem {
   start: number;
   end: number;
   mode: 'full' | 'pip';
+  position?: 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+  search?: string; // immagine cercata online dall'IA
+}
+
+export type StickerKind = 'follow' | 'like' | 'subscribe' | 'comment' | 'share' | 'link';
+export interface StickerItem {
+  id: string;
+  kind: StickerKind;
+  label?: string;
+  start: number;
+  end: number;
+  position: 'top' | 'center' | 'bottom';
 }
 
 export interface EditSpec {
@@ -50,6 +62,7 @@ export interface EditSpec {
   subtitles: boolean;
   texts: TextItem[];
   overlays: OverlayItem[];
+  stickers: StickerItem[];
 }
 
 export interface MediaItem {
