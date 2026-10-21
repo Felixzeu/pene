@@ -22,25 +22,25 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
   const start = await fetch(`${GRAPH}/${page.id}/video_reels?upload_phase=START&access_token=${page.access_token}`, { method: 'POST' });
   const startData = (await start.json()) as { video_id?: string; upload_url?: string; error?: { message?: string } };
   if (!startData.video_id || !startData.upload_url) {
+    console.error('[Facebook] avvio upload rifiutato:', JSON.stringify(startData));
     throw new AppError(ERR.publishFailed('Facebook', startData.error?.message?.slice(0, 160) ?? 'errore avvio'), 502);
   }
 
-  // 2. Trasferisci il file (dal disco, senza tenerlo in memoria).
-  const { createReadStream, statSync } = await import('fs');
-  const size = statSync(meta.filePath).size;
+  // 2. Trasferisci il file (come Buffer: con gli stream Node il corpo può partire vuoto).
+  const { promises: fsp } = await import('fs');
+  const data = await fsp.readFile(meta.filePath);
+  const size = data.length;
   const transfer = await fetch(startData.upload_url, {
     method: 'POST',
     headers: {
       Authorization: `OAuth ${page.access_token}`,
       offset: '0',
       file_size: String(size),
-      'Content-Length': String(size),
       'Content-Type': 'application/octet-stream',
     },
-    // @ts-expect-error undici accetta stream Node come body
-    body: createReadStream(meta.filePath),
-    duplex: 'half',
+    body: data,
   });
+  console.log(`[Facebook] upload Reel ${startData.video_id} sulla Pagina ${page.name ?? page.id}: HTTP ${transfer.status}`);
   if (!transfer.ok) {
     const t = await transfer.text().catch(() => '');
     throw new AppError(ERR.publishFailed('Facebook', t.slice(0, 160) || `errore trasferimento ${transfer.status}`), 502);
@@ -54,7 +54,8 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
   );
   const publishData = (await publish.json()) as { success?: boolean; error?: { message?: string } };
   if (!publishData.success) {
+    console.error('[Facebook] pubblicazione rifiutata:', JSON.stringify(publishData));
     throw new AppError(ERR.publishFailed('Facebook', publishData.error?.message?.slice(0, 160) ?? 'errore pubblicazione'), 502);
   }
-  return { url: `https://facebook.com/${page.id}/videos/${startData.video_id}` };
+  return { url: `https://www.facebook.com/reel/${startData.video_id}`, message: 'Pubblicato sulla Pagina Facebook (può volerci qualche minuto per vederlo).' };
 };
