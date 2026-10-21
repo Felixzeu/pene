@@ -170,6 +170,10 @@ export const linkedProviders = () =>
 /** URL da aprire nel browser per collegare un social (OAuth2). */
 export const authUrl = (provider: ProviderId) => `${API_URL}/api/auth/${provider}`;
 
+/** Scollega un social dal backend. */
+export const unlinkProvider = (provider: ProviderId) =>
+  request<{ ok: boolean }>(`/api/auth/${provider}`, { method: 'DELETE' }, 15000);
+
 /** Modmail & bug report, con screenshot facoltativo. */
 export async function sendReport(r: {
   kind: 'bug' | 'idea' | 'message'; text: string; contact?: string; device?: string; appVersion?: string;

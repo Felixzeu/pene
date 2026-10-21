@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import * as WebBrowser from 'expo-web-browser';
+import * as ExpoLinking from 'expo-linking';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
 import PublishSettingsPanel from '../components/PublishSettingsPanel';
 import { DEFAULT_SETTINGS, loadPublishSettings, savePublishSettings } from '../services/publishSettings';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
-import { authUrl, linkedProviders, mediaUrl, publishVideo } from '../services/api';
+import { authUrl, linkedProviders, mediaUrl, publishVideo, unlinkProvider } from '../services/api';
 import { saveVideoToPhotos } from '../services/download';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome, PublishSettings } from '../types';
@@ -45,6 +47,32 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
     const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refreshLinked(); });
     return () => sub.remove();
   }, [refreshLinked]);
+
+  // Collegamento dentro l'app: finestra di login di sistema che si chiude da sola
+  // quando il backend rimanda a viral (exp:// in Expo Go) con l'esito.
+  const [linking, setLinking] = useState<ProviderId | null>(null);
+  const connect = async (id: ProviderId) => {
+    setLinking(id);
+    try {
+      const ret = ExpoLinking.createURL('auth');
+      const res = await WebBrowser.openAuthSessionAsync(`${authUrl(id)}?return=${encodeURIComponent(ret)}`, ret);
+      if (res.type === 'success') {
+        const q = ExpoLinking.parse(res.url).queryParams ?? {};
+        const ok = q.status === 'ok';
+        Alert.alert(ok ? 'Collegato!' : 'Collegamento non riuscito', String(q.message ?? ''));
+      }
+    } catch (e) {
+      Alert.alert('Collegamento non riuscito', e instanceof Error ? e.message : 'Riprova.');
+    } finally {
+      setLinking(null);
+      refreshLinked();
+    }
+  };
+  const disconnect = (id: ProviderId, label: string) =>
+    Alert.alert(`Scollegare ${label}?`, 'Potrai ricollegarlo quando vuoi.', [
+      { text: 'Annulla', style: 'cancel' },
+      { text: 'Scollega', style: 'destructive', onPress: () => unlinkProvider(id).then(refreshLinked).catch(() => {}) },
+    ]);
 
   const videoUrl = mediaUrl(project.finalVideoUrl);
   const player = useVideoPlayer(videoUrl ? { uri: videoUrl } : null, (p) => { p.loop = true; });
@@ -179,12 +207,14 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                     <RotateCcw size={15} color={colors.warm} />
                     <Text style={styles.retry}>Riprova</Text>
                   </Pressable>
+                ) : linking === p.id ? (
+                  <Badge text="collego…" tone="accent" />
                 ) : linked[p.id] ? (
-                  <Pressable onPress={() => Linking.openURL(authUrl(p.id))} hitSlop={8} style={styles.inline}>
+                  <Pressable onPress={() => connect(p.id)} onLongPress={() => disconnect(p.id, p.label)} hitSlop={8} style={styles.inline}>
                     <Badge text="collegato" tone="ok" />
                   </Pressable>
                 ) : (
-                  <Pressable onPress={() => Linking.openURL(authUrl(p.id))} hitSlop={8} style={styles.inline}>
+                  <Pressable onPress={() => connect(p.id)} hitSlop={8} style={styles.inline}>
                     <Link2 size={15} color={colors.textDim} />
                     <Text style={styles.link}>Collega</Text>
                   </Pressable>
@@ -199,7 +229,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           })}
         </View>
         <Text style={styles.hint}>
-          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
+          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell'app e si chiude da solo. Tieni premuto "collegato" per scollegare. Se TikTok non si apre sul telefono, collega dal PC da http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
         </Text>
 
         {error && (

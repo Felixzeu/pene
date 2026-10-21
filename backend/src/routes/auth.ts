@@ -2,7 +2,7 @@ import { listPages, NO_PAGE_HINT } from '../publishers/metaPages';
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { config } from '../config';
-import { isLinked, loadToken, saveToken } from '../lib/tokens';
+import { isLinked, loadToken, removeToken, saveToken } from '../lib/tokens';
 import { AppError, ERR } from '../lib/errors';
 
 // OAuth2 per i social. L'app apre la pagina di consenso nel browser;
@@ -11,7 +11,7 @@ import { AppError, ERR } from '../lib/errors';
 type Provider = 'youtube' | 'instagram' | 'facebook' | 'tiktok';
 
 // Stato anti-CSRF in memoria (sessioni di 10 minuti).
-const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number }>();
+const pending = new Map<string, { provider: Provider; verifier?: string; createdAt: number; returnTo?: string }>();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of pending) if (now - v.createdAt > 600000) pending.delete(k);
@@ -30,9 +30,18 @@ authRouter.get('/status', async (_req, res) => {
   res.json(Object.fromEntries(entries));
 });
 
+// Dall'app il login si apre in una finestra di sistema (ASWebAuthenticationSession):
+// a fine login si torna all'app con un link exp:// o viral://, che chiude la finestra.
+const RETURN_OK = /^(exp|exps|viral):\/\/[^\s]{1,300}$/;
+function backToApp(res: import('express').Response, returnTo: string, provider: string, ok: boolean, message: string) {
+  const sep = returnTo.includes('?') ? '&' : '?';
+  res.redirect(`${returnTo}${sep}provider=${encodeURIComponent(provider)}&status=${ok ? 'ok' : 'error'}&message=${encodeURIComponent(message.slice(0, 300))}`);
+}
+
 authRouter.get('/:provider', (req, res) => {
   const provider = req.params.provider as Provider;
   const state = randomBytes(16).toString('hex');
+  const ret = typeof req.query.return === 'string' && RETURN_OK.test(req.query.return) ? req.query.return : undefined;
   const o = config.oauth;
 
   // Chiavi mancanti: meglio un messaggio chiaro qui che un errore criptico del social.
@@ -48,7 +57,7 @@ authRouter.get('/:provider', (req, res) => {
   }
 
   if (provider === 'youtube') {
-    pending.set(state, { provider, createdAt: Date.now() });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
     const url = 'https://accounts.google.com/o/oauth2/v2/auth' +
       `?client_id=${o.youtube.clientId}&redirect_uri=${encodeURIComponent(o.youtube.redirect)}` +
       '&response_type=code&access_type=offline&prompt=consent' +
@@ -59,7 +68,7 @@ authRouter.get('/:provider', (req, res) => {
 
   if (provider === 'instagram' || provider === 'facebook') {
     const cfg = provider === 'instagram' ? o.instagram : o.facebook;
-    pending.set(state, { provider, createdAt: Date.now() });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
     const url = 'https://www.facebook.com/v21.0/dialog/oauth' +
       `?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(cfg.redirect)}` +
       `&scope=${encodeURIComponent(cfg.scope)}&state=${state}&response_type=code` +
@@ -71,7 +80,7 @@ authRouter.get('/:provider', (req, res) => {
   if (provider === 'tiktok') {
     // App "Web" di TikTok: niente PKCE (è solo per app desktop/mobile, e con un
     // code_challenge non atteso TikTok mostra "Page not available"). Basta il client_secret.
-    pending.set(state, { provider, createdAt: Date.now() });
+    pending.set(state, { provider, createdAt: Date.now(), returnTo: ret });
     const url = 'https://www.tiktok.com/v2/auth/authorize/' +
       `?client_key=${encodeURIComponent(o.tiktok.clientKey)}&response_type=code` +
       `&scope=${encodeURIComponent(o.tiktok.scope)}` +
@@ -155,13 +164,17 @@ export async function exchangeCode(provider: Provider, code: string): Promise<vo
 
 // I callback verificano lo state (anti-CSRF) e completano lo scambio del codice.
 authRouter.get('/:provider/callback', async (req, res, next) => {
+  let returnTo: string | undefined;
   try {
     const provider = req.params.provider as Provider;
     const { code, state, error_description } = req.query as { code?: string; state?: string; error_description?: string };
+    returnTo = state ? pending.get(state)?.returnTo : undefined;
     if (error_description || !code || !state) throw new AppError(`Autorizzazione annullata: ${error_description ?? 'nessun codice ricevuto'}`, 400);
     const sess = pending.get(state);
     if (!sess || sess.provider !== provider) throw new AppError('Sessione di autorizzazione scaduta: riprova.', 400);
     pending.delete(state);
+    returnTo = sess.returnTo;
+    const reply = (ok: boolean, msg: string) => (returnTo ? backToApp(res, returnTo, provider, ok, msg) : res.send(page(msg)));
 
     await exchangeCode(provider, code);
 
@@ -170,19 +183,35 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
       const { accessToken } = await loadToken(provider);
       const pages = await listPages(accessToken, provider).catch(() => []);
       const ig = pages.find((p) => p.instagram_business_account?.id);
-      if (pages.length === 0) { res.send(page(`Accesso fatto, ma ${NO_PAGE_HINT}`)); return; }
+      if (pages.length === 0) { reply(false, `Accesso fatto, ma ${NO_PAGE_HINT}`); return; }
       if (provider === 'instagram' && !ig) {
-        res.send(page(`Accesso fatto, ma la Pagina ${pages[0].name ?? ''} non ha un account Instagram professionale collegato.`));
+        reply(false, `Accesso fatto, ma la Pagina ${pages[0].name ?? ''} non ha un account Instagram professionale collegato.`);
         return;
       }
-      res.send(page(`Account collegato! Pagina: ${(ig ?? pages[0]).name ?? 'ok'}. Puoi tornare nell app.`));
+      reply(true, `Account collegato! Pagina: ${(ig ?? pages[0]).name ?? 'ok'}.`);
       return;
     }
 
-    res.send(page('Account collegato! Puoi tornare nell app.'));
+    reply(true, 'Account collegato!');
   } catch (e) {
     // Si apre nel browser: meglio una pagina leggibile che JSON.
-    if (e instanceof AppError) { res.status(e.status).send(page(e.message)); return; }
+    if (e instanceof AppError) {
+      if (returnTo) { backToApp(res, returnTo, req.params.provider ?? '', false, e.message); return; }
+      res.status(e.status).send(page(e.message));
+      return;
+    }
+    next(e);
+  }
+});
+
+// DELETE /api/auth/:provider — scollega il social.
+authRouter.delete('/:provider', async (req, res, next) => {
+  try {
+    const provider = req.params.provider;
+    if (!['youtube', 'instagram', 'facebook', 'tiktok'].includes(provider)) throw new AppError(ERR.badProvider, 400);
+    await removeToken(provider);
+    res.json({ ok: true });
+  } catch (e) {
     next(e);
   }
 });

@@ -47,6 +47,13 @@ export async function loadToken(provider: string): Promise<{ accessToken: string
   return JSON.parse(payload);
 }
 
+/** Scollega un social (cancella il suo token). */
+export async function removeToken(provider: string): Promise<void> {
+  const store = await read();
+  delete store[provider];
+  await write(store);
+}
+
 export const isLinked = async (provider: string): Promise<boolean> => {
   const store = await read();
   return Boolean(store[provider]);
