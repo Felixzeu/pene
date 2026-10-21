@@ -32,7 +32,8 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
     method: 'POST',
     headers: {
       Authorization: `OAuth ${page.access_token}`,
-      file_url: meta.videoUrl,
+      offset: '0',
+      file_size: String(size),
       'Content-Length': String(size),
       'Content-Type': 'application/octet-stream',
     },

@@ -20,10 +20,25 @@ export const authRouter = Router();
 
 const BASE64URL = (b: Buffer) => b.toString('base64url');
 
+const page = (msg: string) =>
+  `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;background:#0B0A0E;color:#F5F3EE;display:grid;place-items:center;height:100vh;margin:0;padding:24px;text-align:center"><h2>${msg}</h2></body></html>`;
+
 authRouter.get('/:provider', (req, res) => {
   const provider = req.params.provider as Provider;
   const state = randomBytes(16).toString('hex');
   const o = config.oauth;
+
+  // Chiavi mancanti: meglio un messaggio chiaro qui che un errore criptico del social.
+  const keyName = { youtube: 'YOUTUBE_CLIENT_ID', instagram: 'META_APP_ID', facebook: 'META_APP_ID', tiktok: 'TIKTOK_CLIENT_KEY' }[provider];
+  const keyValue = provider === 'tiktok' ? o.tiktok.clientKey : o[provider]?.clientId;
+  if (keyName && !keyValue) {
+    res.status(400).send(page(`Manca ${keyName} nel file backend/.env: inseriscila e riavvia il backend.`));
+    return;
+  }
+  if (keyName && !config.publicUrl.startsWith('https://')) {
+    res.status(400).send(page('PUBLIC_URL nel file backend/.env deve essere l URL https di Cloudflare Tunnel: impostalo e riavvia il backend.'));
+    return;
+  }
 
   if (provider === 'youtube') {
     pending.set(state, { provider, createdAt: Date.now() });
@@ -153,7 +168,7 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
       await exchangeCode(provider, code);
     }
 
-    res.send('<html><body style="font-family:sans-serif;background:#0B0A0E;color:#F5F3EE;display:grid;place-items:center;height:100vh"><h2>Account collegato! Puoi tornare nell app.</h2></body></html>');
+    res.send(page('Account collegato! Puoi tornare nell app.'));
   } catch (e) {
     next(e);
   }

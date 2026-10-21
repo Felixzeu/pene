@@ -1,9 +1,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Senza slash finale: gli URL di callback devono combaciare esattamente con quelli registrati.
+const PUBLIC_URL = (process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
+
 export const config = {
   port: Number(process.env.PORT ?? 3000),
-  publicUrl: process.env.PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 3000}`,
+  publicUrl: PUBLIC_URL || `http://localhost:${process.env.PORT ?? 3000}`,
   llmProvider: (process.env.LLM_PROVIDER ?? 'gemini') as 'gemini' | 'ollama',
   geminiKey: process.env.GEMINI_API_KEY ?? '',
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
@@ -18,25 +21,25 @@ export const config = {
     youtube: {
       clientId: process.env.YOUTUBE_CLIENT_ID ?? '',
       clientSecret: process.env.YOUTUBE_CLIENT_SECRET ?? '',
-      redirect: `${process.env.PUBLIC_URL ?? ''}/api/auth/youtube/callback`,
+      redirect: `${PUBLIC_URL}/api/auth/youtube/callback`,
       scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl',
     },
     instagram: {
       clientId: process.env.META_APP_ID ?? '',
       clientSecret: process.env.META_APP_SECRET ?? '',
-      redirect: `${process.env.PUBLIC_URL ?? ''}/api/auth/instagram/callback`,
-      scope: 'instagram_basic,instagram_content_publish,pages_show_list',
+      redirect: `${PUBLIC_URL}/api/auth/instagram/callback`,
+      scope: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
     },
     facebook: {
       clientId: process.env.META_APP_ID ?? '',
       clientSecret: process.env.META_APP_SECRET ?? '',
-      redirect: `${process.env.PUBLIC_URL ?? ''}/api/auth/facebook/callback`,
-      scope: 'pages_manage_posts,pages_read_engagement',
+      redirect: `${PUBLIC_URL}/api/auth/facebook/callback`,
+      scope: 'pages_show_list,pages_manage_posts,pages_read_engagement',
     },
     tiktok: {
       clientKey: process.env.TIKTOK_CLIENT_KEY ?? '',
       clientSecret: process.env.TIKTOK_CLIENT_SECRET ?? '',
-      redirect: `${process.env.PUBLIC_URL ?? ''}/api/auth/tiktok/callback`,
+      redirect: `${PUBLIC_URL}/api/auth/tiktok/callback`,
       scope: 'user.info.basic,video.upload,video.publish',
     },
   },

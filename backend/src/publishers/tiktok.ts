@@ -1,5 +1,5 @@
 import { AppError, ERR } from '../lib/errors';
-import { loadToken } from '../lib/tokens';
+import { freshAccessToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
 
 // TikTok Content Posting API (gratuita). LIMITE IMPORTANTE:
@@ -9,7 +9,7 @@ import type { PublishMeta, PublishResult } from './index';
 const API = 'https://open.tiktokapis.com/v2';
 
 export const tiktokPublish = async (meta: PublishMeta): Promise<PublishResult> => {
-  const { accessToken } = await loadToken('tiktok');
+  const accessToken = await freshAccessToken('tiktok');
   const caption = `${meta.title} ${meta.hashtags.map((h) => `#${h}`).join(' ')}`.slice(0, 2200);
 
   // 1. Richiedi un URL di upload diretto (direct post, PRIVATO finché l'app non è approvata).

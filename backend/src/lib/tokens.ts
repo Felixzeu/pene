@@ -51,3 +51,41 @@ export const isLinked = async (provider: string): Promise<boolean> => {
   const store = await read();
   return Boolean(store[provider]);
 };
+
+/**
+ * Token di accesso valido: YouTube (1 ora) e TikTok (24 ore) scadono presto,
+ * quindi prima di pubblicare lo rinnoviamo con il refresh token salvato.
+ */
+export async function freshAccessToken(provider: 'youtube' | 'tiktok'): Promise<string> {
+  const t = await loadToken(provider);
+  if (!t.refreshToken) return t.accessToken;
+  const o = config.oauth;
+  const r = provider === 'youtube'
+    ? await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: o.youtube.clientId,
+        client_secret: o.youtube.clientSecret,
+        refresh_token: t.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+    : await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_key: o.tiktok.clientKey,
+        client_secret: o.tiktok.clientSecret,
+        refresh_token: t.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+  const d = (await r.json().catch(() => ({}))) as {
+    access_token?: string; refresh_token?: string; data?: { access_token?: string; refresh_token?: string };
+  };
+  const access = d.access_token ?? d.data?.access_token;
+  if (!access) return t.accessToken; // rinnovo fallito: proviamo con quello che c'è
+  await saveToken(provider, access, d.refresh_token ?? d.data?.refresh_token ?? t.refreshToken);
+  return access;
+}

@@ -1,12 +1,12 @@
 import { AppError, ERR } from '../lib/errors';
-import { loadToken } from '../lib/tokens';
+import { freshAccessToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
 
 // YouTube Data API v3 (piano gratuito: 10.000 unità/giorno; un upload ≈ 1600 unità).
 // OAuth2: il token è stato salvato durante /api/auth/youtube/callback.
 
 export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> => {
-  const { accessToken } = await loadToken('youtube');
+  const accessToken = await freshAccessToken('youtube');
 
   // 1. Apri una sessione di upload "resumable".
   const init = await fetch(

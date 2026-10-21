@@ -15,6 +15,8 @@ import { AppError, ERR } from './lib/errors';
 import './lib/ffmpeg'; // registra la pipeline di montaggio sulla coda
 
 const app = express();
+// Dietro Cloudflare Tunnel: l'IP reale arriva in X-Forwarded-For (serve al rate limit).
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
