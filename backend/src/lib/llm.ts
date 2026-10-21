@@ -191,21 +191,31 @@ function parseOutput(raw: string): ScriptOutput {
 // L'IA riceve la spec attuale, le parole con i tempi e i media caricati, e
 // restituisce la spec completa aggiornata. Il backend la valida prima di usarla.
 
-const EDIT_SYSTEM = `Sei l'assistente di montaggio di un'app per video verticali.
+const EDIT_SYSTEM = `Sei l'assistente di montaggio di un'app per video verticali (TikTok, Reels, Shorts).
 Ricevi lo stato attuale del montaggio (JSON "spec"), la trascrizione con i tempi e i media disponibili.
-Applica SOLO le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
+Applica le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
 {"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase in italiano"}
 Formato della spec:
 {"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
  "subtitles": true|false,
  "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
- "overlays": [{"id": string, "mediaId": uno degli id dei media, "start": s, "end": s, "mode": "full"|"pip"}]}
-Regole:
-- Tutti i tempi di texts e overlays sono in secondi sul video FINALE, cioè dopo aver tolto trimStart.
-- "Al secondo X" significa X secondi dall'inizio del video finale come lo vede l'utente.
-- Se l'utente non indica la durata di un testo o di un media, usa 3 secondi.
+ "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
+               "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right"}],
+ "stickers": [{"id": string, "kind": "follow"|"like"|"subscribe"|"comment"|"share"|"link", "label": testo facoltativo, "start": s, "end": s, "position": "top"|"center"|"bottom"}]}
+Strumenti:
+- "stickers" sono pulsanti animati già pronti: follow = "+ SEGUI" / tasto segui, like = "♥ MI PIACE", subscribe = "ISCRIVITI",
+  comment = "COMMENTA", share = "CONDIVIDI", link = "LINK IN BIO". Per "tasto segui", "metti il like", "iscriviti" usa SEMPRE uno sticker.
+- Se l'utente chiede un'immagine che NON è tra i media (es. "una foto della Torre Eiffel", "il logo di Instagram"),
+  aggiungi un overlay con "search": "parole di ricerca brevi in inglese" al posto di "mediaId": il backend la scarica da internet.
+Regole di posizionamento (fai scelte da montatore esperto):
+- Tutti i tempi sono in secondi sul video FINALE, cioè dopo aver tolto trimStart. "Al secondo X" = X secondi dall'inizio del video finale.
+- Se l'utente non indica i tempi, scegli il momento migliore leggendo la trascrizione: metti un'immagine quando viene nominata la cosa,
+  uno sticker "follow" dopo l'hook o alla call to action, un testo sulla frase che riassume.
+- Durata: testi 2-3 s, immagini 2-4 s, sticker 2.5 s, salvo indicazioni.
+- Con i sottotitoli attivi non mettere testi in basso: usa "top" (o "center" per un titolo d'impatto).
+- Foto orizzontali o loghi: "pip" (riquadro) in "top-right"; foto che devono riempire lo schermo: "full". Non coprire il viso troppo a lungo.
+- Non sovrapporre nello stesso istante due elementi nella stessa posizione.
 - Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.
-- "pip" è un riquadro piccolo in alto a destra, "full" copre tutto lo schermo.
 - Se la richiesta non è una modifica realizzabile con questi strumenti, rispondi {"error": "spiegazione breve in italiano"}.`;
 
 export async function generateEditSpec(p: {
@@ -214,6 +224,8 @@ export async function generateEditSpec(p: {
   words: { word: string; start: number; end: number }[];
   duration: number;
   media: { id: string; kind: string; name: string; duration?: number }[];
+  /** Scarica da internet un'immagine per un overlay con "search" e ne restituisce l'id. */
+  fetchImage?: (query: string) => Promise<{ id: string; kind: string; name: string }>;
 }): Promise<{ spec: EditSpec; summary: string }> {
   const shift = p.spec.trimStart;
   const finalLen = Math.max(0, p.duration - p.spec.trimStart - p.spec.trimEnd);
@@ -241,6 +253,16 @@ ${transcript.slice(0, 6000)}`;
     throw new AppError(ERR.editNotUnderstood, 422);
   }
   if (obj.error) throw new AppError(`L IA non può fare questa modifica: ${String(obj.error).slice(0, 200)}`, 422);
+  // Immagini da cercare online: si scaricano e diventano media veri.
+  const rawSpec = (obj.spec ?? {}) as { overlays?: { mediaId?: string; search?: string }[] };
+  for (const o of rawSpec.overlays ?? []) {
+    if (o.search && !p.media.some((m) => m.id === o.mediaId)) {
+      if (!p.fetchImage) throw new AppError('Ricerca di immagini online non disponibile.', 422);
+      const m = await p.fetchImage(String(o.search).slice(0, 100));
+      p.media.push(m);
+      o.mediaId = m.id;
+    }
+  }
   const parsed = specSchema.safeParse(obj.spec);
   if (!parsed.success) throw new AppError(ERR.editNotUnderstood, 422);
   // Scarta media inesistenti inventati dal modello.

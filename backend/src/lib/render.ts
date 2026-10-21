@@ -27,6 +27,28 @@ export const overlaySchema = z.object({
   start: z.number().min(0),
   end: z.number().min(0),
   mode: z.enum(['full', 'pip']).default('full'),
+  // Solo per "pip": angolo del riquadro (lontano da viso e sottotitoli).
+  position: z.enum(['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right']).default('top-right'),
+  search: z.string().max(120).optional(), // cosa è stato cercato online (solo informativo)
+});
+
+// Elementi grafici pronti (niente file da caricare): pulsanti animati stile social.
+export const STICKERS = {
+  follow: { label: '+ SEGUI', bg: '&H5522FE&' },      // rosso TikTok #FE2255 (ASS è BGR)
+  like: { label: '♥ MI PIACE', bg: '&H5522FE&' },
+  subscribe: { label: 'ISCRIVITI', bg: '&H0000FF&' },  // rosso YouTube
+  comment: { label: 'COMMENTA', bg: '&HFF5CA1&' },     // viola
+  share: { label: 'CONDIVIDI', bg: '&HFF5CA1&' },
+  link: { label: 'LINK IN BIO', bg: '&HC85CFF&' },     // rosa
+} as const;
+
+export const stickerSchema = z.object({
+  id: z.string().min(1).max(40),
+  kind: z.enum(Object.keys(STICKERS) as [keyof typeof STICKERS, ...(keyof typeof STICKERS)[]]),
+  label: z.string().max(30).optional(), // testo personalizzato al posto di quello standard
+  start: z.number().min(0),
+  end: z.number().min(0),
+  position: z.enum(['top', 'center', 'bottom']).default('center'),
 });
 
 export const specSchema = z.object({
@@ -35,10 +57,11 @@ export const specSchema = z.object({
   subtitles: z.boolean().default(true),
   texts: z.array(textSchema).max(30).default([]),
   overlays: z.array(overlaySchema).max(20).default([]),
+  stickers: z.array(stickerSchema).max(20).default([]),
 });
 
 export type EditSpec = z.infer<typeof specSchema>;
-export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, texts: [], overlays: [] });
+export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, texts: [], overlays: [], stickers: [] });
 
 export interface MediaItem { id: string; kind: 'image' | 'video'; name: string; path: string; duration?: number }
 
@@ -105,6 +128,7 @@ Style: Social,Inter-Black,74,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,
 Style: TextTop,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,8,60,60,260,1
 Style: TextCenter,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,5,60,60,0,1
 Style: TextBottom,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,320,1
+Style: Sticker,Inter-Black,62,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
@@ -134,6 +158,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
   for (const t of spec.texts) {
     const style = { top: 'TextTop', center: 'TextCenter', bottom: 'TextBottom' }[t.position];
     lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${style},,0,0,0,,{\\fs${SIZE[t.size]}}${assText(t.text)}`);
+  }
+  // Pulsanti: rettangolo arrotondato disegnato in ASS + testo, con entrata "pop" e una pulsazione.
+  const Y = { top: 330, center: 960, bottom: 1540 } as const;
+  for (const st of spec.stickers ?? []) {
+    const def = STICKERS[st.kind];
+    const label = assText((st.label || def.label).toUpperCase());
+    const w = Math.max(360, Math.min(900, 70 + label.length * 42));
+    const h = 130;
+    const r = h / 2;
+    const box = `m ${r} 0 l ${w - r} 0 b ${w} 0 ${w} ${h} ${w - r} ${h} l ${r} ${h} b 0 ${h} 0 0 ${r} 0`;
+    const y = Y[st.position];
+    const anim = '\\fscx0\\fscy0\\t(0,180,\\fscx112\\fscy112)\\t(180,300,\\fscx100\\fscy100)\\t(900,1100,\\fscx106\\fscy106)\\t(1100,1300,\\fscx100\\fscy100)';
+    const t0 = fmtTime(st.start);
+    const t1 = fmtTime(Math.max(st.end, st.start + 0.5));
+    lines.push(`Dialogue: 2,${t0},${t1},Sticker,,0,0,0,,{\\an5\\pos(540,${y})\\bord0\\shad6\\4c&H000000&\\1c${def.bg}${anim}\\p1}${box}{\\p0}`);
+    lines.push(`Dialogue: 3,${t0},${t1},Sticker,,0,0,0,,{\\an5\\pos(540,${y})\\bord0\\shad0\\1c&HFFFFFF&${anim}}${label}`);
   }
   return `${head}\n${lines.join('\n')}\n`;
 }
@@ -176,7 +216,8 @@ export async function renderFinal(job: Job, spec: EditSpec): Promise<void> {
     const fit = o.mode === 'full'
       ? 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920'
       : 'scale=460:-2';
-    const pos = o.mode === 'full' ? '0:0' : 'W-w-50:220';
+    const PIP = { 'top-left': '50:220', 'top-right': 'W-w-50:220', center: '(W-w)/2:(H-h)/2', 'bottom-left': '50:H-h-640', 'bottom-right': 'W-w-50:H-h-640' } as const;
+    const pos = o.mode === 'full' ? '0:0' : PIP[o.position ?? 'top-right'];
     const prep = media.kind === 'video'
       ? `trim=duration=${(end - start).toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB,`
       : '';

@@ -8,6 +8,7 @@ import { createJob, getJob, requeue, saveJobs } from '../lib/queue';
 import { probeDuration, renderFinal, specSchema } from '../lib/render';
 import { generateEditSpec } from '../lib/llm';
 import { AppError, ERR } from '../lib/errors';
+import { fetchWebImage } from '../lib/webmedia';
 
 const upload = multer({
   dest: paths.tmp,
@@ -111,6 +112,14 @@ editRouter.post('/:jobId/media', mediaUpload.single('file') as unknown as expres
   }
 });
 
+// GET /api/edit/:jobId/media/:mediaId — il file di un media, per l'anteprima live nell'app.
+editRouter.get('/:jobId/media/:mediaId', (req, res, next) => {
+  const job = getJob(req.params.jobId ?? '');
+  const m = job?.media?.find((x) => x.id === req.params.mediaId);
+  if (!m) { next(new AppError('Media non trovato.', 404)); return; }
+  res.sendFile(path.resolve(m.path), { maxAge: '1h' });
+});
+
 // POST /api/edit/:jobId/ai — l'IA traduce una richiesta a parole in una spec di montaggio.
 editRouter.post('/:jobId/ai', async (req, res, next) => {
   try {
@@ -122,8 +131,10 @@ editRouter.post('/:jobId/ai', async (req, res, next) => {
       words: job.words ?? [],
       duration: job.duration ?? 0,
       media: (job.media ?? []).map(({ id, kind, name, duration }) => ({ id, kind, name, duration })),
+      fetchImage: (q) => fetchWebImage(job, q),
     });
-    res.json(out);
+    saveJobs();
+    res.json({ ...out, media: (job.media ?? []).map(({ id, kind, name, duration }) => ({ id, kind, name, duration })) });
   } catch (e) {
     next(e);
   }
