@@ -93,10 +93,14 @@ export const aspectResolver = (media: MediaItem[] = []) => (o: { mode: 'full' | 
 
 function ff(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const p = spawn('ffmpeg', ['-hide_banner', '-y', ...args]);
+    // stdin chiuso: FFmpeg non resta mai in attesa di input. Limite di 15 minuti:
+    // un FFmpeg bloccato non deve fermare la coda per sempre.
+    const p = spawn('ffmpeg', ['-hide_banner', '-nostdin', '-y', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    p.stderr.on('data', (d) => { stderr += String(d); });
-    p.on('error', () => reject(new AppError(ERR.ffmpegMissing, 500)));
+    const timer = setTimeout(() => { stderr += '\n[timeout 15 minuti]'; p.kill('SIGKILL'); }, 15 * 60_000);
+    p.stderr!.on('data', (d) => { stderr = (stderr + String(d)).slice(-20000); });
+    p.on('error', () => { clearTimeout(timer); reject(new AppError(ERR.ffmpegMissing, 500)); });
+    p.on('close', () => clearTimeout(timer));
     p.on('close', (code) => (code === 0 ? resolve(stderr) : reject(new AppError(`FFmpeg ha restituito un errore (${code}): ${stderr.slice(-300)}`, 500))));
   });
 }

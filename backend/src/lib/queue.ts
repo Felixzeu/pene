@@ -147,6 +147,9 @@ export async function removeUserJobs(): Promise<number> {
 
 function report(job: Job) {
   return (stage: JobStage, progress: number, message?: string) => {
+    if (job.stage !== stage || job.message !== message) {
+      if (message) console.log(`[job] ${job.jobId}: ${Math.round(progress * 100)}% ${message}`);
+    }
     if (job.stage !== stage) saveJobs();
     job.stage = stage;
     job.progress = progress;
