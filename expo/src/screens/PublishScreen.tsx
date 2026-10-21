@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { AlertTriangle, CheckCircle2, ExternalLink, Link2, RotateCcw, Send } from 'lucide-react-native';
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, RotateCcw, Send } from 'lucide-react-native';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
 import { authUrl, mediaUrl, publishVideo } from '../services/api';
+import { saveVideoToPhotos } from '../services/download';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome } from '../types';
 
@@ -24,6 +25,7 @@ export default function PublishScreen({ project, onBack, onHome, update }: {
   const [selected, setSelected] = useState<ProviderId[]>(['youtube']);
   const [busy, setBusy] = useState<ProviderId[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const outcomes = project.published ?? [];
 
   const videoUrl = mediaUrl(project.finalVideoUrl);
@@ -61,6 +63,19 @@ export default function PublishScreen({ project, onBack, onHome, update }: {
     }
   };
 
+  const download = async () => {
+    if (!videoUrl) return;
+    setSaving(true);
+    try {
+      await saveVideoToPhotos(videoUrl);
+      Alert.alert('Video salvato', 'Lo trovi nell app Foto.');
+    } catch (e) {
+      Alert.alert('Salvataggio non riuscito', e instanceof Error ? e.message : 'Riprova.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const pending = selected.filter((id) => outcomeOf(id)?.status !== 'published');
 
   return (
@@ -71,6 +86,16 @@ export default function PublishScreen({ project, onBack, onHome, update }: {
           <View style={styles.playerWrap}>
             <VideoView player={player} style={styles.player} contentFit="contain" />
           </View>
+        ) : null}
+        {videoUrl ? (
+          <Btn
+            label="Salva nel rullino"
+            variant="ghost"
+            icon={<Download size={17} color={colors.text} />}
+            onPress={download}
+            loading={saving}
+            style={{ marginBottom: 22 }}
+          />
         ) : null}
 
         <Field label="Titolo">
@@ -154,7 +179,7 @@ export default function PublishScreen({ project, onBack, onHome, update }: {
 const styles = StyleSheet.create({
   playerWrap: {
     borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
-    aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 22,
+    aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 14,
   },
   player: { flex: 1 },
   section: { color: colors.text, fontSize: 13.5, fontWeight: '700', marginBottom: 8, letterSpacing: 0.2 },
