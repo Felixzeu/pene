@@ -57,13 +57,41 @@ export async function generateScript(p: {
 function llmJson(system: string, user: string, temperature: number): Promise<string> {
   return config.llmProvider === 'ollama'
     ? withRetry(() => ollamaChat(system, user), 'ollama')
-    : withRetry(() => geminiCall(system, user, temperature), 'gemini');
+    : geminiWithFallback(system, user, temperature);
 }
 
-async function geminiCall(system: string, user: string, temperature: number): Promise<string> {
+// Gemini gratuito va spesso in sovraccarico (503) o a quota (429): si riprova
+// sullo stesso modello e poi si passa ai modelli flash successivi.
+function geminiModels(): string[] {
+  const extra = (process.env.GEMINI_FALLBACK_MODELS ?? 'gemini-flash-latest,gemini-2.5-flash,gemini-flash-lite-latest,gemini-2.5-flash-lite')
+    .split(',').map((m) => m.trim()).filter(Boolean);
+  return [...new Set([config.geminiModel, ...extra])];
+}
+
+async function geminiWithFallback(system: string, user: string, temperature: number): Promise<string> {
+  let last: unknown;
+  for (const model of geminiModels()) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await geminiCall(model, system, user, temperature);
+      } catch (e) {
+        last = e;
+        const status = e instanceof AppError ? e.status : 0;
+        console.warn(`[gemini] ${model} tentativo ${attempt + 1}: ${e instanceof Error ? e.message : e}`);
+        if (status === 404) break; // modello non disponibile: passa al successivo
+        if (status !== 429 && status < 500) throw e; // rifiuti e risposte non valide non si riprovano
+        if (attempt === 0) await sleep(1500 + Math.random() * 1000);
+      }
+    }
+  }
+  const status = last instanceof AppError ? last.status : 0;
+  throw status === 429 ? last : new AppError('Gemini è sovraccarico in questo momento: riprova tra un minuto.', 503);
+}
+
+async function geminiCall(model: string, system: string, user: string, temperature: number): Promise<string> {
   if (!config.geminiKey) throw new AppError(ERR.geminiKey, 500);
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,7 +104,8 @@ async function geminiCall(system: string, user: string, temperature: number): Pr
   ).catch(() => { throw new AppError('Gemini non raggiungibile: controlla la connessione del backend.', 502); });
 
   if (res.status === 429) throw new AppError(ERR.quotaGemini, 429);
-  if (!res.ok) throw new AppError(`Gemini ha risposto con errore ${res.status}.`, 502);
+  if (res.status === 404) throw new AppError(`Modello Gemini ${model} non disponibile.`, 404);
+  if (!res.ok) throw new AppError(`Gemini ha risposto con errore ${res.status}.`, res.status >= 500 ? 503 : 502);
 
   const data = (await res.json()) as {
     promptFeedback?: { blockReason?: string };
