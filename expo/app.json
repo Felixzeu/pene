@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "CreatorPrompt",
+    "slug": "creatorprompt",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0A0E",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "CreatorPrompt usa la fotocamera per registrare il tuo video.",
+        "NSMicrophoneUsageDescription": "CreatorPrompt usa il microfono per registrare l'audio del tuo video.",
+        "NSPhotoLibraryAddUsageDescription": "CreatorPrompt può salvare i video montati nella tua galleria."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0A0E"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permetti a CreatorPrompt di usare la fotocamera per registrare il video."
+        }
+      ],
+      "expo-video"
+    ]
+  }
+}
