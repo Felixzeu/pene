@@ -24,6 +24,16 @@ export const config = {
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', // solo per "Elimina account"
   },
   // Amministratori (email separate da virgola): nessun limite, accesso a tutte le funzioni.
+  // Coin: costo di ogni azione e bonus di benvenuto (modificabili dal file .env).
+  coins: {
+    welcome: Number(process.env.COINS_WELCOME ?? 20),
+    script: Number(process.env.COIN_COST_SCRIPT ?? 1),
+    rewrite: Number(process.env.COIN_COST_REWRITE ?? 1),
+    edit: Number(process.env.COIN_COST_EDIT ?? 5),
+    ai: Number(process.env.COIN_COST_AI ?? 1),
+    render: Number(process.env.COIN_COST_RENDER ?? 2),
+    publish: Number(process.env.COIN_COST_PUBLISH ?? 1),
+  },
   adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
   oauth: {
     youtube: {

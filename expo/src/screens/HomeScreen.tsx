@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Alert, Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Clapperboard, MessageSquareWarning, Pencil, Plus, Trash2, UserRound, Video } from 'lucide-react-native';
+import { Clapperboard, Coins, MessageSquareWarning, Pencil, Plus, Trash2, UserRound, Video } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Screen } from '../components/ui';
 import { colors, fonts, gradient } from '../theme';
-import { linkedProviders } from '../services/api';
+import { getWallet, linkedProviders, listServerVideos } from '../services/api';
 import { loadHistory, removeProject } from '../services/history';
 import type { Project } from '../types';
 
@@ -79,22 +79,28 @@ function SwipeRow({ onPress, onDelete, onEdit, onSwipe, children }: {
   );
 }
 
-export default function HomeScreen({ onNew, onResume, onModify, onReport, onAccount }: {
+export default function HomeScreen({ onNew, onResume, onModify, onReport, onAccount, onSocials }: {
   onNew: () => void;
   onResume: (p: Project) => void;
   onModify: (p: Project) => void;
   onReport: () => void;
   onAccount?: () => void;
+  onSocials: () => void;
 }) {
   const [history, setHistory] = useState<Project[]>([]);
   const [swiping, setSwiping] = useState(false);
   const [reload, setReload] = useState(0);
   const [linked, setLinked] = useState(0);
+  const [coins, setCoins] = useState<number | null | undefined>(undefined);
+  const [expired, setExpired] = useState<Set<string>>(new Set());
 
   React.useEffect(() => { loadHistory().then(setHistory); }, [reload]);
   React.useEffect(() => {
     linkedProviders().then((l) => setLinked(Object.values(l).filter(Boolean).length)).catch(() => {});
-  }, []);
+    getWallet().then((w) => setCoins(w.coins)).catch(() => {});
+    // Il file del video resta sul server 24 ore: dopo, nell'elenco compare come "scaduto".
+    listServerVideos().then((v) => setExpired(new Set(v.filter((x) => x.expired).map((x) => x.id)))).catch(() => {});
+  }, [reload]);
 
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
   const thisWeek = history.filter((p) => p.createdAt > weekAgo).length;
@@ -113,6 +119,12 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
       <View style={styles.top}>
         <Text style={styles.logo}>viral<Text style={{ color: colors.accent2 }}>.</Text></Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          {coins !== undefined && (
+            <Pressable onPress={onAccount} style={styles.coins} accessibilityLabel="I tuoi coin" hitSlop={6}>
+              <Coins size={16} color={colors.warm} />
+              <Text style={styles.coinsText}>{coins === null ? '∞' : coins}</Text>
+            </Pressable>
+          )}
           <Pressable onPress={onReport} style={styles.iconBtn} accessibilityLabel="Modmail e bug report" hitSlop={6}>
             <MessageSquareWarning size={19} color={colors.text} />
           </Pressable>
@@ -140,10 +152,10 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
           <Text style={styles.statLabel}>Questa settimana</Text>
           <Text style={styles.statNum}>{thisWeek} video</Text>
         </View>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Social collegati</Text>
+        <Pressable style={({ pressed }) => [styles.stat, pressed && { opacity: 0.7 }]} onPress={onSocials}>
+          <Text style={styles.statLabel}>Social collegati ›</Text>
           <Text style={styles.statNum}>{linked} / 4</Text>
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.sectionRow}>
@@ -172,6 +184,7 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
         }
         renderItem={({ item }) => {
           const live = item.published?.some((o) => o.status === 'published');
+          const gone = !!item.jobId && expired.has(item.jobId);
           return (
             <SwipeRow
               onPress={() => onResume(item)}
@@ -188,9 +201,9 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
                   {item.platform} · {new Date(item.createdAt).toLocaleDateString('it-IT')}
                 </Text>
               </View>
-              <View style={[styles.pill, { backgroundColor: live ? colors.ok : item.finalVideoUrl ? colors.warm : colors.surfaceAlt }]}>
-                <Text style={[styles.pillText, { color: live || item.finalVideoUrl ? colors.onAccent : colors.textDim }]}>
-                  {live ? 'live' : item.finalVideoUrl ? 'pronto' : stageOf(item).toLowerCase()}
+              <View style={[styles.pill, { backgroundColor: live ? colors.ok : gone ? colors.surfaceAlt : item.finalVideoUrl ? colors.warm : colors.surfaceAlt }]}>
+                <Text style={[styles.pillText, { color: (live || item.finalVideoUrl) && !(gone && !live) ? colors.onAccent : colors.textDim }]}>
+                  {live ? 'live' : gone ? 'scaduto' : item.finalVideoUrl ? 'pronto' : stageOf(item).toLowerCase()}
                 </Text>
               </View>
             </SwipeRow>
@@ -208,6 +221,11 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: colors.border,
     backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
   },
+  coins: {
+    height: 44, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12,
+  },
+  coinsText: { color: colors.text, fontFamily: fonts.display, fontSize: 15 },
   heroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 34, letterSpacing: -1.2, lineHeight: 38, marginTop: 26, marginBottom: 22 },
   newWrap: { borderRadius: 24, shadowColor: colors.accent2, shadowOpacity: 0.45, shadowRadius: 24, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
   newCard: { height: 124, borderRadius: 24, padding: 18, justifyContent: 'space-between' },

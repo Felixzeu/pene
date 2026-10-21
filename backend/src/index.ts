@@ -15,6 +15,7 @@ import { reportRouter } from './routes/report';
 import { accountRouter } from './routes/account';
 import { accountsEnabled, isAdminRequest, requireUser } from './lib/user';
 import { AppError, ERR } from './lib/errors';
+import { expireOld } from './lib/videos';
 import './lib/ffmpeg'; // registra la pipeline di montaggio sulla coda
 
 const app = express();
@@ -88,6 +89,7 @@ setInterval(() => {
   cleanOlderThan(paths.tmp, 2 * 3600 * 1000);
   cleanOlderThan(paths.videos, 24 * 3600 * 1000);
   cleanOlderThan(paths.media, 24 * 3600 * 1000);
+  expireOld(); // nell'archivio su Supabase i video restano, segnati come scaduti
 }, 30 * 60 * 1000).unref();
 
 fs.mkdir(paths.tmp, { recursive: true }).then(() => {

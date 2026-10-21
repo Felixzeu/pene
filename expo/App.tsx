@@ -14,6 +14,7 @@ import ModifyScreen from './src/screens/ModifyScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import SocialsScreen from './src/screens/SocialsScreen';
 import { setHistoryUser, upsertProject } from './src/services/history';
 import { accountsEnabled, getSession, onSessionChange } from './src/services/auth';
 import type { Project } from './src/types';
@@ -29,7 +30,8 @@ type Route =
   | { name: 'publish'; project: Project }
   | { name: 'modify'; project: Project }
   | { name: 'report' }
-  | { name: 'account' };
+  | { name: 'account' }
+  | { name: 'socials' };
 
 // Stack navigator minimale con transizione di entrata: le schermate sono un
 // flusso lineare (idea → script → registrazione → montaggio → pubblicazione),
@@ -87,6 +89,7 @@ export default function App() {
             onNew={() => push({ name: 'new' })}
             onReport={() => push({ name: 'report' })}
             onAccount={accountsEnabled ? () => push({ name: 'account' }) : undefined}
+            onSocials={() => push({ name: 'socials' })}
             onResume={(p) => {
               // Riprende il progetto dal punto in cui si era fermato.
               if (p.published?.length || p.finalVideoUrl) push({ name: 'publish', project: p });
@@ -106,7 +109,8 @@ export default function App() {
         )}
 
         {current.name === 'report' && <ReportScreen onBack={pop} />}
-        {current.name === 'account' && <AccountScreen email={user?.email ?? null} onBack={pop} />}
+        {current.name === 'account' && <AccountScreen email={user?.email ?? null} onBack={pop} onSocials={() => push({ name: 'socials' })} />}
+        {current.name === 'socials' && <SocialsScreen onBack={pop} />}
 
         {current.name === 'new' && (
           <NewVideoScreen

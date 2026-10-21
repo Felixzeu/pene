@@ -1,16 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import * as WebBrowser from 'expo-web-browser';
-import * as ExpoLinking from 'expo-linking';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
 import PublishSettingsPanel from '../components/PublishSettingsPanel';
 import { DEFAULT_SETTINGS, loadPublishSettings, savePublishSettings } from '../services/publishSettings';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
-import { authUrl, linkedProviders, mediaUrl, publishVideo, unlinkProvider } from '../services/api';
+import { linkedProviders, mediaUrl, publishVideo, unlinkProvider } from '../services/api';
 import { saveVideoToPhotos } from '../services/download';
+import { linkSocial } from '../services/social';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome, PublishSettings } from '../types';
 
@@ -54,13 +53,8 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   const connect = async (id: ProviderId) => {
     setLinking(id);
     try {
-      const ret = ExpoLinking.createURL('auth');
-      const res = await WebBrowser.openAuthSessionAsync(await authUrl(id, ret), ret);
-      if (res.type === 'success') {
-        const q = ExpoLinking.parse(res.url).queryParams ?? {};
-        const ok = q.status === 'ok';
-        Alert.alert(ok ? 'Collegato!' : 'Collegamento non riuscito', String(q.message ?? ''));
-      }
+      const r = await linkSocial(id);
+      if (r) Alert.alert(r.ok ? 'Collegato!' : 'Collegamento non riuscito', r.message);
     } catch (e) {
       Alert.alert('Collegamento non riuscito', e instanceof Error ? e.message : 'Riprova.');
     } finally {

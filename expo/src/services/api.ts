@@ -188,6 +188,17 @@ export async function authUrl(provider: ProviderId, returnTo: string): Promise<s
 
 export const getAccount = () => request<{ id: string; email: string | null; admin: boolean }>('/api/account', {}, 15000);
 
+export interface Wallet {
+  coins: number | null; // null = senza limiti (admin o senza account)
+  unlimited: boolean;
+  costs: Record<'script' | 'rewrite' | 'edit' | 'ai' | 'render' | 'publish', number>;
+  history: { delta: number; reason: string; created_at: string }[];
+}
+export const getWallet = () => request<Wallet>('/api/account/coins', {}, 15000);
+
+export interface ServerVideo { id: string; title: string | null; status: string; expired: boolean; expires_at: string | null }
+export const listServerVideos = () => request<{ videos: ServerVideo[] }>('/api/account/videos', {}, 15000).then((r) => r.videos);
+
 export const deleteAccount = () => request<{ ok: boolean }>('/api/account', { method: 'DELETE' }, 60000);
 
 /** Scollega un social dal backend. */

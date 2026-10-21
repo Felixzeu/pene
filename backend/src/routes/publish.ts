@@ -5,6 +5,9 @@ import { config } from '../lib/config-bridge';
 import { getJob } from '../lib/queue';
 import { publishTo } from '../publishers';
 import { AppError, ERR } from '../lib/errors';
+import { charge, refund } from '../lib/coins';
+import { currentUser } from '../lib/user';
+import { markPublished } from '../lib/videos';
 
 const schema = z.object({
   jobId: z.string().min(1),
@@ -47,7 +50,10 @@ publishRouter.post('/', async (req, res, next) => {
 
     const results = await Promise.all(
       body.providers.map(async (provider) => {
+        // Ogni social costa a parte: se la pubblicazione fallisce, i coin tornano indietro.
+        let paid = 0;
         try {
+          paid = await charge('publish', provider);
           const out = await publishTo(provider, {
             title: body.title,
             description: body.description,
@@ -59,6 +65,7 @@ publishRouter.post('/', async (req, res, next) => {
           });
           return { provider, status: 'published' as const, url: out.url, message: out.message };
         } catch (e) {
+          await refund(currentUser().id, paid, 'publish');
           return {
             provider,
             status: 'error' as const,
@@ -71,6 +78,7 @@ publishRouter.post('/', async (req, res, next) => {
     // Il video resta su disco per permettere "Riprova" o altri social:
     // la pulizia periodica in index.ts lo rimuove dopo 24 ore.
 
+    await markPublished(job.jobId, results.filter((r) => r.status === 'published'));
     res.json({ results });
   } catch (e) {
     next(e);

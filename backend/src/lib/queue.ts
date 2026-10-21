@@ -6,6 +6,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import path from 'path';
 import type { Word } from './whisper';
 import type { EditSpec, MediaItem } from './render';
+import { refund, type CoinAction } from './coins';
+import { recordVideo } from './videos';
 
 // Coda dei lavori con concorrenza 1: il montaggio video è pesante sulla CPU
 // (soprattutto sui piani di hosting gratuiti), quindi un job alla volta.
@@ -36,12 +38,13 @@ export interface Job {
   createdAt: number;
 }
 
+type Paid = { amount: number; action: CoinAction };
 type Task = (job: Job, report: (stage: JobStage, progress: number, message?: string) => void) => Promise<void>;
 
 const emitter = new EventEmitter();
 
 const jobs = new Map<string, Job>();
-const queue: Array<{ job: Job; task?: Task }> = [];
+const queue: Array<{ job: Job; task?: Task; paid?: Paid }> = [];
 let running = false;
 
 // I lavori vengono salvati su disco: dopo un riavvio del backend i video montati
@@ -92,7 +95,7 @@ function loadJobs(): void {
 }
 loadJobs();
 
-export function createJob(params: Pick<Job, 'projectId' | 'language' | 'rawPath' | 'title' | 'hashtags'>): Job {
+export function createJob(params: Pick<Job, 'projectId' | 'language' | 'rawPath' | 'title' | 'hashtags'>, paid?: Paid): Job {
   const job: Job = {
     jobId: `${Date.now().toString(36)}-${randomBytes(9).toString('base64url')}`,
     userId: currentUser().id,
@@ -103,18 +106,18 @@ export function createJob(params: Pick<Job, 'projectId' | 'language' | 'rawPath'
     createdAt: Date.now(),
   };
   jobs.set(job.jobId, job);
-  queue.push({ job });
+  queue.push({ job, paid });
   saveJobs();
   pump();
   return job;
 }
 
 /** Rimette in coda un job già montato con un lavoro diverso (es. nuovo export con le modifiche). */
-export function requeue(job: Job, task: Task): void {
+export function requeue(job: Job, task: Task, paid?: Paid): void {
   job.stage = 'queued';
   job.progress = 0;
   job.message = undefined;
-  queue.push({ job, task });
+  queue.push({ job, task, paid });
   pump();
 }
 
@@ -167,9 +170,15 @@ async function pump() {
     next.version += 1;
     next.finalVideoUrl = `/media/${encodeURIComponent(next.jobId)}.mp4?v=${next.version}`;
     next.finalPath = `${process.cwd()}/public/videos/${next.jobId}.mp4`;
+    recordVideo(next);
   } catch (e) {
     next.stage = 'error';
     next.message = e instanceof Error ? e.message : 'Montaggio non riuscito.';
+    // Montaggio non riuscito: i coin tornano all'utente.
+    if (entry.paid) {
+      await refund(next.userId ?? 'local', entry.paid.amount, entry.paid.action);
+      next.message += ` I ${entry.paid.amount} coin ti sono stati restituiti.`;
+    }
   } finally {
     running = false;
     saveJobs();

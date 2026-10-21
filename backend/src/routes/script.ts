@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { generateScript, rewriteScript } from '../lib/llm';
+import { withCoins } from '../lib/coins';
 
 const schema = z.object({
   topic: z.string().min(5).max(500),
@@ -15,7 +16,7 @@ export const scriptRouter = Router();
 scriptRouter.post('/', async (req, res, next) => {
   try {
     const params = schema.parse(req.body);
-    const out = await generateScript(params);
+    const out = await withCoins('script', () => generateScript(params));
     res.json(out);
   } catch (e) {
     next(e);
@@ -35,7 +36,8 @@ const rewriteSchema = z.object({
 // POST /api/script/rewrite — modifica lo script già scritto senza ripartire da zero.
 scriptRouter.post('/rewrite', async (req, res, next) => {
   try {
-    res.json(await rewriteScript(rewriteSchema.parse(req.body)));
+    const params = rewriteSchema.parse(req.body);
+    res.json(await withCoins('rewrite', () => rewriteScript(params)));
   } catch (e) {
     next(e);
   }

@@ -11,6 +11,7 @@ import { AppError, ERR } from '../lib/errors';
 import { fetchWebImage } from '../lib/webmedia';
 import { prepareImage } from '../lib/cutout';
 import { currentUser } from '../lib/user';
+import { charge, withCoins } from '../lib/coins';
 
 // 200 MB per tutti, 2 GB per gli amministratori.
 const uploader = (field: string) => {
@@ -33,6 +34,7 @@ editRouter.post('/', uploader('video'), async (req, res, next) => {
   try {
     if (!req.file) throw new AppError(ERR.noFile, 400);
     const meta = metaSchema.parse(req.body);
+    const paid = await charge('edit').catch(async (e) => { await fs.rm(req.file!.path, { force: true }); throw e; });
 
     // Sposta il file temporaneo con un nome stabile.
     const rawPath = path.join(paths.tmp, `${Date.now().toString(36)}-raw.mp4`);
@@ -47,7 +49,7 @@ editRouter.post('/', uploader('video'), async (req, res, next) => {
       rawPath,
       title: meta.title,
       hashtags,
-    });
+    }, paid ? { amount: paid, action: 'edit' } : undefined);
     res.json({ jobId: job.jobId });
   } catch (e) {
     next(e);
@@ -131,14 +133,14 @@ editRouter.post('/:jobId/ai', async (req, res, next) => {
   try {
     const job = readyJob(req.params.jobId);
     const body = z.object({ instruction: z.string().min(3).max(1000), spec: specSchema }).parse(req.body);
-    const out = await generateEditSpec({
+    const out = await withCoins('ai', () => generateEditSpec({
       instruction: body.instruction,
       spec: body.spec,
       words: job.words ?? [],
       duration: job.duration ?? 0,
       media: (job.media ?? []).map(mediaInfo),
       fetchImage: (q) => fetchWebImage(job, q),
-    });
+    }));
     saveJobs();
     res.json({ ...out, media: (job.media ?? []).map(mediaInfo) });
   } catch (e) {
@@ -147,15 +149,16 @@ editRouter.post('/:jobId/ai', async (req, res, next) => {
 });
 
 // POST /api/edit/:jobId/render — rifà l'export finale con le modifiche (in coda, un job alla volta).
-editRouter.post('/:jobId/render', (req, res, next) => {
+editRouter.post('/:jobId/render', async (req, res, next) => {
   try {
     const job = readyJob(req.params.jobId);
     const spec = specSchema.parse(req.body?.spec);
+    const paid = await charge('render');
     requeue(job, async (j, report) => {
       report('editing', 0.3, 'Applico le modifiche…');
       await renderFinal(j, spec);
       report('editing', 0.98, 'Fatto');
-    });
+    }, paid ? { amount: paid, action: 'render' } : undefined);
     res.json({ ok: true });
   } catch (e) {
     next(e);
