@@ -59,7 +59,11 @@ editRouter.post('/', uploader('video'), async (req, res, next) => {
 // GET /api/edit/:jobId — stato del job per il polling dell'app.
 editRouter.get('/:jobId', (req, res) => {
   const job = getJob(req.params.jobId ?? '');
-  if (!job) { res.status(404).json({ error: ERR.jobNotFound }); return; }
+  if (!job) {
+    console.warn(`[edit] stato di ${req.params.jobId}: lavoro non trovato per l'utente ${currentUser().id}`);
+    res.status(404).json({ error: ERR.jobNotFound });
+    return;
+  }
   res.json({
     jobId: job.jobId,
     stage: job.stage,

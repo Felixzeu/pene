@@ -48,16 +48,22 @@ export default function EditScreen({ project, onBack, onReady, onModify, onHome 
     if (!jobId) return;
     stopRef.current = false;
     const poll = async () => {
+      let fails = 0;
       while (!stopRef.current) {
         try {
           const j = await getJob(jobId);
+          fails = 0;
           setJob(j);
           if (j.stage === 'ready' || j.stage === 'error') {
             if (j.stage === 'error') setFailed(true);
             return;
           }
-        } catch {
-          // errore di rete momentaneo: riprova al giro successivo
+        } catch (e) {
+          // Errore momentaneo: si riprova. Se continua, lo mostriamo invece di restare fermi.
+          fails += 1;
+          const msg = e instanceof Error ? e.message : 'Errore di rete.';
+          if (/non trovato|scaduto/i.test(msg)) { setJob((j) => (j ? { ...j, stage: 'error', message: msg } : j)); setFailed(true); return; }
+          if (fails >= 3) setJob((j) => (j ? { ...j, message: `Non riesco a leggere lo stato: ${msg}` } : j));
         }
         await new Promise((r) => setTimeout(r, 3000));
       }
@@ -165,6 +171,7 @@ export default function EditScreen({ project, onBack, onReady, onModify, onHome 
             })}
             <View style={{ marginTop: 14 }}>
               <Text style={steps.pct}>{Math.round((job?.progress ?? current / 4) * 100)}%</Text>
+              {!failed && job?.message ? <Text style={[steps.pct, { textAlign: 'left', marginTop: 6 }]}>{job.message}</Text> : null}
             </View>
           </View>
         )}

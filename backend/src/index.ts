@@ -32,7 +32,8 @@ app.use('/api', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Troppe richieste: aspetta un minuto e riprova.' },
-  skip: (req) => isAdminRequest(req), // gli amministratori non hanno limiti
+  // Gli amministratori non hanno limiti; lo stato del montaggio (letto ogni 3 secondi) non conta.
+  skip: (req) => (req.method === 'GET' && /^\/edit\/[^/]+$/.test(req.path)) || isAdminRequest(req),
 }));
 
 // Il video montato è servito con link temporaneo (scaricabile dai social
