@@ -23,6 +23,8 @@ export const config = {
     anonKey: process.env.SUPABASE_ANON_KEY ?? '',
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', // solo per "Elimina account"
   },
+  // Amministratori (email separate da virgola): nessun limite, accesso a tutte le funzioni.
+  adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean),
   oauth: {
     youtube: {
       clientId: process.env.YOUTUBE_CLIENT_ID ?? '',

@@ -9,7 +9,7 @@ export const accountRouter = Router();
 // GET /api/account — l'utente collegato.
 accountRouter.get('/', (_req, res) => {
   const u = currentUser();
-  res.json({ id: u.id, email: u.email ?? null, accounts: accountsEnabled() });
+  res.json({ id: u.id, email: u.email ?? null, admin: Boolean(u.admin), accounts: accountsEnabled() });
 });
 
 // DELETE /api/account — cancella social collegati, video e l'account Supabase.

@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import { LogOut, Trash2, UserRound } from 'lucide-react-native';
+import { Crown, LogOut, Trash2, UserRound } from 'lucide-react-native';
 import { Btn, Header, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
 import { signOut } from '../services/auth';
-import { deleteAccount } from '../services/api';
+import { deleteAccount, getAccount } from '../services/api';
 import { clearHistory } from '../services/history';
 
 // Il tuo account: esci, oppure elimina tutto (richiesto dall'App Store).
 export default function AccountScreen({ email, onBack }: { email: string | null; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => { getAccount().then((a) => setAdmin(a.admin)).catch(() => {}); }, []);
 
   const remove = () =>
     Alert.alert(
@@ -45,6 +47,9 @@ export default function AccountScreen({ email, onBack }: { email: string | null;
             <Text style={styles.label}>Accesso fatto come</Text>
             <Text style={styles.email} numberOfLines={1}>{email ?? 'account senza email'}</Text>
           </View>
+          {admin && (
+            <View style={styles.admin}><Crown size={13} color={colors.onAccent} /><Text style={styles.adminText}>Admin</Text></View>
+          )}
         </View>
         <Btn label="Esci" variant="ghost" icon={<LogOut size={17} color={colors.text} />} onPress={() => signOut()} disabled={busy} />
         <Btn label="Elimina account" variant="danger" icon={<Trash2 size={17} color={colors.err} />} onPress={remove} loading={busy} />
@@ -64,5 +69,7 @@ const styles = StyleSheet.create({
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   label: { color: colors.textDim, fontSize: 12 },
   email: { color: colors.text, fontFamily: fonts.semibold, fontSize: 16, marginTop: 2 },
+  admin: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.warm, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  adminText: { color: colors.onAccent, fontFamily: fonts.display, fontSize: 11.5 },
   note: { color: colors.textDim, fontSize: 12.5, lineHeight: 18, marginTop: 6 },
 });

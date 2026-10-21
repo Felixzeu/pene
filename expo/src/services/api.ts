@@ -186,6 +186,8 @@ export async function authUrl(provider: ProviderId, returnTo: string): Promise<s
   return `${base}&ticket=${encodeURIComponent(ticket)}`;
 }
 
+export const getAccount = () => request<{ id: string; email: string | null; admin: boolean }>('/api/account', {}, 15000);
+
 export const deleteAccount = () => request<{ ok: boolean }>('/api/account', { method: 'DELETE' }, 60000);
 
 /** Scollega un social dal backend. */

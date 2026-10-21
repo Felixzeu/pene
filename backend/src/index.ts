@@ -13,7 +13,7 @@ import { publishRouter } from './routes/publish';
 import { authRouter } from './routes/auth';
 import { reportRouter } from './routes/report';
 import { accountRouter } from './routes/account';
-import { accountsEnabled, requireUser } from './lib/user';
+import { accountsEnabled, isAdminRequest, requireUser } from './lib/user';
 import { AppError, ERR } from './lib/errors';
 import './lib/ffmpeg'; // registra la pipeline di montaggio sulla coda
 
@@ -31,6 +31,7 @@ app.use('/api', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Troppe richieste: aspetta un minuto e riprova.' },
+  skip: (req) => isAdminRequest(req), // gli amministratori non hanno limiti
 }));
 
 // Il video montato è servito con link temporaneo (scaricabile dai social

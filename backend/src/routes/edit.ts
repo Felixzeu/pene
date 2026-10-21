@@ -10,11 +10,14 @@ import { generateEditSpec } from '../lib/llm';
 import { AppError, ERR } from '../lib/errors';
 import { fetchWebImage } from '../lib/webmedia';
 import { prepareImage } from '../lib/cutout';
+import { currentUser } from '../lib/user';
 
-const upload = multer({
-  dest: paths.tmp,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
-});
+// 200 MB per tutti, 2 GB per gli amministratori.
+const uploader = (field: string) => {
+  const normal = multer({ dest: paths.tmp, limits: { fileSize: 200 * 1024 * 1024 } }).single(field) as unknown as express.RequestHandler;
+  const admin = multer({ dest: paths.tmp, limits: { fileSize: 2048 * 1024 * 1024 } }).single(field) as unknown as express.RequestHandler;
+  return ((req, res, next) => (currentUser().admin ? admin : normal)(req, res, next)) as express.RequestHandler;
+};
 
 const metaSchema = z.object({
   projectId: z.string().min(1).max(80),
@@ -26,7 +29,7 @@ const metaSchema = z.object({
 export const editRouter = Router();
 
 // POST /api/edit — riceve il video grezzo e mette in coda il montaggio.
-editRouter.post('/', upload.single('video') as unknown as express.RequestHandler, async (req, res, next) => {
+editRouter.post('/', uploader('video'), async (req, res, next) => {
   try {
     if (!req.file) throw new AppError(ERR.noFile, 400);
     const meta = metaSchema.parse(req.body);
@@ -74,10 +77,6 @@ editRouter.get('/:jobId', (req, res) => {
 
 // ── Modifiche dopo il primo montaggio ────────────────────────────────────
 
-const mediaUpload = multer({
-  dest: paths.tmp,
-  limits: { fileSize: 200 * 1024 * 1024 },
-});
 
 function readyJob(jobId: string | undefined) {
   const job = getJob(jobId ?? '');
@@ -91,7 +90,7 @@ const mediaInfo = ({ id, kind, name, duration, aspect, cutoutPath, cutoutAspect 
   ({ id, kind, name, duration, aspect, cutout: !!cutoutPath, cutoutAspect });
 
 // POST /api/edit/:jobId/media — carica una foto o un video da inserire nel montaggio.
-editRouter.post('/:jobId/media', mediaUpload.single('file') as unknown as express.RequestHandler, async (req, res, next) => {
+editRouter.post('/:jobId/media', uploader('file'), async (req, res, next) => {
   try {
     const job = getJob(req.params.jobId ?? '');
     if (!job?.sourcePath) throw new AppError(ERR.jobNotFound, 404);

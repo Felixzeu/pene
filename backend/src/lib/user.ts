@@ -8,9 +8,9 @@ import { AppError } from './errors';
 // a tutto il codice chiamato da quella richiesta (token dei social, job, pubblicazioni).
 // Senza Supabase c'è un solo utente, "local", come prima degli account.
 
-export interface User { id: string; email?: string }
+export interface User { id: string; email?: string; admin?: boolean }
 
-const LOCAL: User = { id: 'local' };
+const LOCAL: User = { id: 'local', admin: true }; // senza account c'è solo il proprietario
 const store = new AsyncLocalStorage<User>();
 const cache = new Map<string, { user: User; until: number }>();
 
@@ -38,12 +38,23 @@ export async function verifyToken(token: string): Promise<User> {
   }).catch(() => null);
   if (!r) throw new AppError('Non riesco a verificare il login (Supabase non raggiungibile): riprova.', 503);
   if (!r.ok) throw new AppError('Sessione scaduta: esci e accedi di nuovo.', 401);
-  const d = (await r.json()) as { id?: string; email?: string };
+  const d = (await r.json()) as { id?: string; email?: string; email_confirmed_at?: string | null };
   if (!d.id) throw new AppError('Sessione non valida: accedi di nuovo.', 401);
-  const user = { id: d.id, email: d.email };
+  // Admin solo con email confermata: nessuno può "prendersi" la tua email senza verificarla.
+  const email = d.email?.toLowerCase();
+  const admin = Boolean(email && d.email_confirmed_at && config.adminEmails.includes(email));
+  const user = { id: d.id, email: d.email, admin };
   if (cache.size > 5000) cache.clear();
   cache.set(token, { user, until: Date.now() + 5 * 60_000 });
   return user;
+}
+
+/** True se la richiesta viene da un amministratore (usato per saltare i limiti). */
+export async function isAdminRequest(req: express.Request): Promise<boolean> {
+  if (!accountsEnabled()) return false;
+  const h = req.headers.authorization ?? '';
+  if (!h.startsWith('Bearer ')) return false;
+  try { return Boolean((await verifyToken(h.slice(7).trim())).admin); } catch { return false; }
 }
 
 /** Middleware: senza login valido risponde 401 (solo se gli account sono attivi). */
