@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, RotateCcw, Send } from 'lucide-react-native';
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
@@ -13,10 +13,11 @@ import type { Project, PublishOutcome } from '../types';
 // Pubblicazione sui social: ogni social è indipendente. Si collega l'account
 // una volta (OAuth nel browser), si scelgono i social e si pubblica; se uno
 // fallisce gli altri restano pubblicati e si può premere "Riprova" solo su quello.
-export default function PublishScreen({ project, onBack, onHome, update }: {
+export default function PublishScreen({ project, onBack, onHome, onModify, update }: {
   project: Project;
   onBack: () => void;
   onHome: () => void;
+  onModify: (p: Project) => void;
   update: (p: Project) => void;
 }) {
   const [title, setTitle] = useState(project.scriptResult?.title ?? '');
@@ -88,14 +89,23 @@ export default function PublishScreen({ project, onBack, onHome, update }: {
           </View>
         ) : null}
         {videoUrl ? (
-          <Btn
-            label="Salva nel rullino"
-            variant="ghost"
-            icon={<Download size={17} color={colors.text} />}
-            onPress={download}
-            loading={saving}
-            style={{ marginBottom: 22 }}
-          />
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 22 }}>
+            <Btn
+              label="Modifica"
+              variant="ghost"
+              icon={<Wand2 size={17} color={colors.text} />}
+              onPress={() => onModify(project)}
+              style={{ flex: 1 }}
+            />
+            <Btn
+              label="Salva"
+              variant="ghost"
+              icon={<Download size={17} color={colors.text} />}
+              onPress={download}
+              loading={saving}
+              style={{ flex: 1 }}
+            />
+          </View>
         ) : null}
 
         <Field label="Titolo">

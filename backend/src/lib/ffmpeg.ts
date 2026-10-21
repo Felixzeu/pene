@@ -6,13 +6,14 @@ import { AppError, ERR } from './errors';
 import { registerTask } from './queue';
 import type { Job } from './queue';
 import { transcribe, type Word } from './whisper';
+import { defaultSpec, probeDuration, renderFinal } from './render';
 
 // Pipeline di montaggio, 100% open source e in locale:
 //  1. audio → WAV per Whisper, trascrizione con timestamp per parola
 //  2. taglio dei silenzi calcolati dai timestamp (sincronizzato con i sottotitoli)
 //  3. pulizia audio: riduzione rumore (afftdn) + normalizzazione (loudnorm)
 //  4. sottotitoli .ass stile social con parola evidenziata, incollati con burn-in
-//  5. export MP4 H.264 1080x1920, 30 fps
+//  5. export MP4 H.264 1080x1920, 30 fps (lib/render.ts, riusato dalle modifiche)
 
 function ff(...args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,14 +23,6 @@ function ff(...args: string[]): Promise<string> {
     p.on('error', () => reject(new AppError(ERR.ffmpegMissing, 500)));
     p.on('close', (code) => (code === 0 ? resolve(stderr) : reject(new AppError(`FFmpeg ha restituito un errore (${code}): ${stderr.slice(-300)}`, 500))));
   });
-}
-
-function fmtTime(sec: number): string {
-  const cs = Math.floor((sec % 1) * 100);
-  const s = Math.floor(sec) % 60;
-  const m = Math.floor(sec / 60) % 60;
-  const h = Math.floor(sec / 3600);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
 /** Calcola gli intervalli da mantenere, tagliando le pause oltre soglia. */
@@ -60,35 +53,6 @@ function remap(t: number, ranges: Array<{ from: number; to: number }>): number {
     }
   }
   return out;
-}
-
-/** Genera i sottotitoli .ass con la parola corrente evidenziata. */
-function buildAss(words: Word[], ranges: Array<{ from: number; to: number }>): string {
-  const head = `[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-WrapStyle: 2
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Social,Inter-Black,74,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,560,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-  const lines: string[] = [];
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    const start = fmtTime(remap(w.start, ranges));
-    const end = fmtTime(remap(w.end, ranges));
-    // Finestra di 6 parole centrata sulla parola corrente, evidenziata in ambra.
-    const window = words.slice(Math.max(0, i - 2), i + 4);
-    const text = window
-      .map((x) => (x === w ? `{\\c&H2BD4FF&}${x.word}{\\c&HFFFFFF&}` : x.word))
-      .join(' ');
-    lines.push(`Dialogue: 0,${start},${end},Social,,0,0,0,,${text}`);
-  }
-  return `${head}\n${lines.join('\n')}\n`;
 }
 
 export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing', p: number, m?: string) => void): Promise<void> {
@@ -132,23 +96,12 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   job.previewUrl = `/media/${encodeURIComponent(job.jobId)}-preview.mp4`;
   job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
 
-  // 4. Sottotitoli con parola evidenziata, incollati nel video.
+  // 4. Sottotitoli con parola evidenziata, incollati nel video (stesso export usato dalle modifiche).
+  // La sorgente delle modifiche è l'anteprima: resta in public/videos per 24 ore, tmp solo 2.
   report('editing', 0.8, 'Sottotitoli e export finale…');
-  const assPath = path.join(work, 'subs.ass');
-  await fs.writeFile(assPath, buildAss(words, ranges), 'utf8');
-
-  const finalPath = path.join(paths.videos, `${job.jobId}.mp4`);
-  await ff(
-    '-i', cleanOut,
-    '-vf', `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,ass='${assPath.replace(/\\/g, '/').replace(/'/g, "\\'")}'`,
-    '-r', '30',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '160k',
-    '-movflags', '+faststart',
-    finalPath,
-  );
-
-  job.finalPath = finalPath;
+  job.sourcePath = previewPath;
+  job.duration = await probeDuration(previewPath);
+  await renderFinal(job, job.spec ?? defaultSpec());
   report('editing', 0.98, 'Fatto');
 }
 

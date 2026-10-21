@@ -21,10 +21,11 @@ const STEP_ORDER: Record<string, number> = { queued: 0, transcribing: 1, editing
 // Quando la pipeline ha tagliato i silenzi, il backend espone anche un video
 // "anteprima" (già tagliato, senza sottotitoli incollati) e la timeline delle
 // parole: qui li componiamo in tempo reale mentre l'export finale prosegue.
-export default function EditScreen({ project, onBack, onReady, onHome }: {
+export default function EditScreen({ project, onBack, onReady, onModify, onHome }: {
   project: Project;
   onBack: () => void;
   onReady: (p: Project) => void;
+  onModify: (p: Project) => void;
   onHome: () => void;
 }) {
   const [jobId, setJobId] = useState(project.jobId);
@@ -193,7 +194,7 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
           {finalUrl ? (
             <>
-              <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
+              <Btn label="Modifica" variant="ghost" icon={<Wand2 size={17} color={colors.text} />} onPress={() => onModify({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1 }} />
               <Btn label="Pubblica" icon={<Share2 size={17} color="#fff" />} onPress={() => onReady({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
             </>
           ) : (

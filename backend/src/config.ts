@@ -49,4 +49,5 @@ export const paths = {
   tmp: 'tmp',
   videos: 'public/videos',
   tokens: 'data/tokens.json',
+  media: 'data/media',
 };

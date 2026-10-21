@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { AppError, ERR } from './errors';
+import { specSchema, type EditSpec } from './render';
 
 // Livello LLM: due provider gratuiti selezionabili con LLM_PROVIDER.
 //  - gemini: API ufficiale Google, free tier (modelli Flash / Flash-Lite)
@@ -47,13 +48,17 @@ async function withRetry<T>(fn: () => Promise<T>, what: string): Promise<T> {
 export async function generateScript(p: {
   topic: string; tone: string; duration: number; platform: string; language: string;
 }): Promise<ScriptOutput> {
-  const raw = config.llmProvider === 'ollama'
-    ? await withRetry(() => ollamaChat(p), 'ollama')
-    : await withRetry(() => geminiCall(p), 'gemini');
-  return parseOutput(raw);
+  return parseOutput(await llmJson(SYSTEM, buildPrompt(p), 0.9));
 }
 
-async function geminiCall(p: { topic: string; tone: string; duration: number; platform: string; language: string }): Promise<string> {
+/** Chiamata al provider scelto (Gemini o Ollama) che deve rispondere in JSON. */
+function llmJson(system: string, user: string, temperature: number): Promise<string> {
+  return config.llmProvider === 'ollama'
+    ? withRetry(() => ollamaChat(system, user), 'ollama')
+    : withRetry(() => geminiCall(system, user, temperature), 'gemini');
+}
+
+async function geminiCall(system: string, user: string, temperature: number): Promise<string> {
   if (!config.geminiKey) throw new AppError(ERR.geminiKey, 500);
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiKey}`,
@@ -61,9 +66,9 @@ async function geminiCall(p: { topic: string; tone: string; duration: number; pl
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: 'user', parts: [{ text: buildPrompt(p) }] }],
-        generationConfig: { temperature: 0.9, responseMimeType: 'application/json' },
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { temperature, responseMimeType: 'application/json' },
       }),
     },
   ).catch(() => { throw new AppError('Gemini non raggiungibile: controlla la connessione del backend.', 502); });
@@ -81,11 +86,11 @@ async function geminiCall(p: { topic: string; tone: string; duration: number; pl
     throw new AppError(ERR.scriptRefused, 422);
   }
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new AppError('Gemini non ha prodotto uno script: riprova.', 502);
+  if (!text) throw new AppError('Gemini non ha prodotto una risposta: riprova.', 502);
   return text;
 }
 
-async function ollamaChat(p: { topic: string; tone: string; duration: number; platform: string; language: string }): Promise<string> {
+async function ollamaChat(system: string, user: string): Promise<string> {
   try {
     const res = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
       method: 'POST',
@@ -95,14 +100,14 @@ async function ollamaChat(p: { topic: string; tone: string; duration: number; pl
         stream: false,
         format: 'json',
         messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: buildPrompt(p) },
+          { role: 'system', content: system },
+          { role: 'user', content: user },
         ],
       }),
     });
     if (!res.ok) throw new AppError(`Ollama ha risposto con errore ${res.status}.`, 502);
     const data = (await res.json()) as { message?: { content?: string } };
-    if (!data.message?.content) throw new AppError('Ollama non ha prodotto uno script.', 502);
+    if (!data.message?.content) throw new AppError('Ollama non ha prodotto una risposta.', 502);
     return data.message.content;
   } catch (e) {
     if (e instanceof AppError) throw e;
@@ -132,4 +137,66 @@ function parseOutput(raw: string): ScriptOutput {
     title: obj.title,
     hashtags: Array.isArray(obj.hashtags) ? obj.hashtags.map(String).map((h) => h.replace(/^#/, '')) : [],
   };
+}
+
+// ── Modifiche al montaggio descritte a parole ─────────────────────────────
+// L'IA riceve la spec attuale, le parole con i tempi e i media caricati, e
+// restituisce la spec completa aggiornata. Il backend la valida prima di usarla.
+
+const EDIT_SYSTEM = `Sei l'assistente di montaggio di un'app per video verticali.
+Ricevi lo stato attuale del montaggio (JSON "spec"), la trascrizione con i tempi e i media disponibili.
+Applica SOLO le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
+{"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase in italiano"}
+Formato della spec:
+{"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
+ "subtitles": true|false,
+ "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
+ "overlays": [{"id": string, "mediaId": uno degli id dei media, "start": s, "end": s, "mode": "full"|"pip"}]}
+Regole:
+- Tutti i tempi di texts e overlays sono in secondi sul video FINALE, cioè dopo aver tolto trimStart.
+- "Al secondo X" significa X secondi dall'inizio del video finale come lo vede l'utente.
+- Se l'utente non indica la durata di un testo o di un media, usa 3 secondi.
+- Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.
+- "pip" è un riquadro piccolo in alto a destra, "full" copre tutto lo schermo.
+- Se la richiesta non è una modifica realizzabile con questi strumenti, rispondi {"error": "spiegazione breve in italiano"}.`;
+
+export async function generateEditSpec(p: {
+  instruction: string;
+  spec: EditSpec;
+  words: { word: string; start: number; end: number }[];
+  duration: number;
+  media: { id: string; kind: string; name: string; duration?: number }[];
+}): Promise<{ spec: EditSpec; summary: string }> {
+  const shift = p.spec.trimStart;
+  const finalLen = Math.max(0, p.duration - p.spec.trimStart - p.spec.trimEnd);
+  const transcript = p.words
+    .map((w) => ({ w: w.word, t: Math.round((w.start - shift) * 10) / 10 }))
+    .filter((w) => w.t >= 0 && w.t <= finalLen)
+    .map((w) => `${w.t}s ${w.w}`)
+    .join('\n');
+  const user = `Richiesta dell'utente: ${p.instruction}
+
+Durata del video prima del taglio: ${p.duration.toFixed(1)} s (video finale attuale: ${finalLen.toFixed(1)} s)
+Spec attuale: ${JSON.stringify(p.spec)}
+Media disponibili: ${JSON.stringify(p.media)}
+Trascrizione (secondi sul video finale attuale):
+${transcript.slice(0, 6000)}`;
+
+  const raw = await llmJson(EDIT_SYSTEM, user, 0.2);
+  let text = raw.trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) text = fence[1] as string;
+  let obj: { spec?: unknown; summary?: string; error?: string };
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    throw new AppError(ERR.editNotUnderstood, 422);
+  }
+  if (obj.error) throw new AppError(`L IA non può fare questa modifica: ${String(obj.error).slice(0, 200)}`, 422);
+  const parsed = specSchema.safeParse(obj.spec);
+  if (!parsed.success) throw new AppError(ERR.editNotUnderstood, 422);
+  // Scarta media inesistenti inventati dal modello.
+  const ids = new Set(p.media.map((m) => m.id));
+  const spec = { ...parsed.data, overlays: parsed.data.overlays.filter((o) => ids.has(o.mediaId)) };
+  return { spec, summary: (obj.summary ?? 'Modifica applicata.').slice(0, 300) };
 }

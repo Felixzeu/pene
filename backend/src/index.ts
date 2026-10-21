@@ -79,6 +79,7 @@ async function cleanOlderThan(dir: string, maxAgeMs: number) {
 setInterval(() => {
   cleanOlderThan(paths.tmp, 2 * 3600 * 1000);
   cleanOlderThan(paths.videos, 24 * 3600 * 1000);
+  cleanOlderThan(paths.media, 24 * 3600 * 1000);
 }, 30 * 60 * 1000).unref();
 
 fs.mkdir(paths.tmp, { recursive: true }).then(() => {

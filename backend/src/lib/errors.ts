@@ -20,5 +20,7 @@ export const ERR = {
   notLinked: 'Account non collegato: tocca "Collega" e completa l autorizzazione nel browser.',
   scriptRefused: 'L IA non può scrivere uno script su questo argomento: prova a riformularlo o scegline un altro.',
   scriptInvalid: 'L IA non è riuscita a generare lo script: riprova o cambia argomento.',
+  editNotUnderstood: 'L IA non ha capito la modifica: prova a scriverla in modo più preciso (es. "metti il testo Ciao al secondo 2").',
+  mediaUnsupported: 'Formato non supportato: carica una foto (JPG/PNG) o un video.',
   publishFailed: (p: string, m: string) => `Pubblicazione su ${p} non riuscita: ${m}`,
 };

@@ -1,5 +1,5 @@
 import { API_URL, type ProviderId } from '../config';
-import type { Job, Project, PublishOutcome, ScriptParams, ScriptResult } from '../types';
+import type { EditSpec, Job, MediaItem, Project, PublishOutcome, ScriptParams, ScriptResult } from '../types';
 
 // Client API verso il backend. Tutti gli errori arrivano già in italiano dal server;
 // qui li normalizziamo e gestiamo retry/timeout dei casi di rete.
@@ -90,6 +90,50 @@ export const getJob = async (jobId: string) => {
   const j = await request<Job>(`/api/edit/${encodeURIComponent(jobId)}`, {}, 15000);
   return { ...j, finalVideoUrl: mediaUrl(j.finalVideoUrl), previewUrl: mediaUrl(j.previewUrl) };
 };
+
+/** Carica una foto o un video della galleria da inserire nel montaggio. */
+export function uploadMedia(
+  jobId: string,
+  file: { uri: string; name: string; type: string },
+  onProgress: (pct: number) => void,
+): Promise<MediaItem> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const form = new FormData();
+    form.append('file', file as unknown as Blob);
+    xhr.open('POST', `${API_URL}/api/edit/${encodeURIComponent(jobId)}/media`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText || '{}');
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+        else reject(new Error(body.error ?? `Errore del server (${xhr.status})`));
+      } catch {
+        reject(new Error('Risposta non valida dal server'));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Upload interrotto: controlla la connessione al backend.'));
+    xhr.send(form);
+  });
+}
+
+/** L'IA trasforma una richiesta a parole in modifiche (non applicate finché non si fa renderEdit). */
+export const aiEdit = (jobId: string, instruction: string, spec: EditSpec) =>
+  request<{ spec: EditSpec; summary: string }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction, spec }),
+  }, 120000);
+
+/** Rifà l'export finale con le modifiche: poi si segue l'avanzamento con getJob. */
+export const renderEdit = (jobId: string, spec: EditSpec) =>
+  request<{ ok: boolean }>(`/api/edit/${encodeURIComponent(jobId)}/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spec }),
+  });
 
 export interface PublishRequest {
   jobId: string;

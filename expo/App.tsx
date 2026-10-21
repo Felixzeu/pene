@@ -9,6 +9,7 @@ import RecordScreen from './src/screens/RecordScreen';
 import ReviewScreen from './src/screens/ReviewScreen';
 import EditScreen from './src/screens/EditScreen';
 import PublishScreen from './src/screens/PublishScreen';
+import ModifyScreen from './src/screens/ModifyScreen';
 import { upsertProject } from './src/services/history';
 import type { Project } from './src/types';
 import { colors } from './src/theme';
@@ -20,7 +21,8 @@ type Route =
   | { name: 'record'; project: Project }
   | { name: 'review'; project: Project }
   | { name: 'edit'; project: Project }
-  | { name: 'publish'; project: Project };
+  | { name: 'publish'; project: Project }
+  | { name: 'modify'; project: Project };
 
 // Stack navigator minimale con transizione di entrata: le schermate sono un
 // flusso lineare (idea → script → registrazione → montaggio → pubblicazione),
@@ -111,6 +113,25 @@ export default function App() {
             onReady={(p) => {
               setStack((s) => [...s.slice(0, -1), { name: 'publish', project: p }]);
             }}
+            onModify={(p) => {
+              setStack((s) => [...s.slice(0, -1), { name: 'publish', project: p }, { name: 'modify', project: p }]);
+            }}
+          />
+        )}
+
+        {current.name === 'modify' && (
+          <ModifyScreen
+            project={current.project}
+            onBack={pop}
+            onDone={(p) => {
+              // Torna a Pubblica con il video aggiornato.
+              setStack((s) => {
+                const rest = s.slice(0, -1);
+                const top = rest[rest.length - 1];
+                if (top?.name === 'publish') return [...rest.slice(0, -1), { name: 'publish', project: { ...top.project, finalVideoUrl: p.finalVideoUrl } }];
+                return [...rest, { name: 'publish', project: p }];
+              });
+            }}
           />
         )}
 
@@ -119,6 +140,7 @@ export default function App() {
             project={current.project}
             onBack={pop}
             onHome={toHome}
+            onModify={(p) => push({ name: 'modify', project: p })}
             update={(p) => setStack((s) => {
               const copy = [...s];
               copy[copy.length - 1] = { ...copy[copy.length - 1], project: p } as Route;

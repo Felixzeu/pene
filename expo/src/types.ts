@@ -26,6 +26,39 @@ export interface Word {
   end: number;
 }
 
+// Modifiche all'export finale. Tempi in secondi sul video finale (dopo il taglio di inizio).
+export interface TextItem {
+  id: string;
+  text: string;
+  start: number;
+  end: number;
+  position: 'top' | 'center' | 'bottom';
+  size: 'small' | 'medium' | 'large';
+}
+
+export interface OverlayItem {
+  id: string;
+  mediaId: string;
+  start: number;
+  end: number;
+  mode: 'full' | 'pip';
+}
+
+export interface EditSpec {
+  trimStart: number;
+  trimEnd: number;
+  subtitles: boolean;
+  texts: TextItem[];
+  overlays: OverlayItem[];
+}
+
+export interface MediaItem {
+  id: string;
+  kind: 'image' | 'video';
+  name: string;
+  duration?: number;
+}
+
 export interface Job {
   jobId: string;
   stage: JobStage;
@@ -36,6 +69,9 @@ export interface Job {
   words?: Word[];      // timeline delle parole per i sottotitoli in tempo reale
   title?: string;
   hashtags?: string[];
+  spec?: EditSpec;
+  duration?: number;   // durata del video tagliato, prima del taglio di inizio/fine
+  media?: MediaItem[];
 }
 
 export type SocialStatus = 'idle' | 'publishing' | 'published' | 'error';
