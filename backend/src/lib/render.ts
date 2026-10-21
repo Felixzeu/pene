@@ -6,7 +6,7 @@ import { paths } from '../config';
 import { AppError, ERR } from './errors';
 import type { Job } from './queue';
 import type { Word } from './whisper';
-import { layoutStickers } from './stickerLayout';
+import { layoutStickers, overlayBox } from './stickerLayout';
 
 // Export finale configurabile: parte dal video già tagliato e ripulito
 // (lo stesso dell'anteprima) e applica le modifiche scelte nell'app o dall'IA:
@@ -31,6 +31,12 @@ export const overlaySchema = z.object({
   // Solo per "pip": angolo del riquadro (lontano da viso e sottotitoli).
   position: z.enum(['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right']).default('top-right'),
   search: z.string().max(120).optional(), // cosa è stato cercato online (solo informativo)
+  // Foto: usa la versione scontornata (soggetto senza sfondo) se disponibile.
+  cutout: z.boolean().default(true),
+  // Posizione scelta a mano trascinando nell'anteprima: centro e larghezza in px su 1080×1920.
+  x: z.number().min(-540).max(1620).optional(),
+  y: z.number().min(-960).max(2880).optional(),
+  w: z.number().min(120).max(1080).optional(),
 });
 
 // Elementi grafici pronti (niente file da caricare): pulsanti animati stile social.
@@ -64,7 +70,26 @@ export const specSchema = z.object({
 export type EditSpec = z.infer<typeof specSchema>;
 export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, texts: [], overlays: [], stickers: [] });
 
-export interface MediaItem { id: string; kind: 'image' | 'video'; name: string; path: string; duration?: number }
+export interface MediaItem {
+  id: string; kind: 'image' | 'video'; name: string; path: string; duration?: number;
+  aspect?: number;        // altezza / larghezza
+  cutoutPath?: string;    // PNG col solo soggetto (sfondo trasparente)
+  cutoutAspect?: number;
+}
+
+/** Il file da usare per un overlay e le sue proporzioni (null = copre tutto lo schermo). */
+export function overlaySource(o: { mode: 'full' | 'pip'; cutout?: boolean }, m: MediaItem): { file: string; aspect: number | null } {
+  const cut = m.kind === 'image' && o.cutout !== false && !!m.cutoutPath;
+  const file = cut ? m.cutoutPath! : m.path;
+  if (o.mode === 'full' && !cut) return { file, aspect: null };
+  return { file, aspect: (cut ? m.cutoutAspect : m.aspect) ?? 1 };
+}
+
+/** Per layoutStickers: proporzioni di ogni overlay in base al media. */
+export const aspectResolver = (media: MediaItem[] = []) => (o: { mode: 'full' | 'pip'; mediaId?: string; cutout?: boolean }) => {
+  const m = media.find((x) => x.id === o.mediaId);
+  return m ? overlaySource(o, m).aspect : o.mode === 'pip' ? 1 : null;
+};
 
 function ff(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -116,7 +141,7 @@ const assText = (s: string) => s.replace(/[{}]/g, '').replace(/\r?\n/g, '\\N');
 const SIZE = { small: 56, medium: 72, large: 96 } as const;
 
 /** Sottotitoli karaoke + testi dell'utente in un unico file .ass (libass, niente font da configurare). */
-export function buildAss(words: Word[], spec: EditSpec): string {
+export function buildAss(words: Word[], spec: EditSpec, media: MediaItem[] = []): string {
   const head = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -161,7 +186,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${style},,0,0,0,,{\\fs${SIZE[t.size]}}${assText(t.text)}`);
   }
   // Pulsanti: rettangolo arrotondato disegnato in ASS + testo, con entrata "pop" e una pulsazione.
-  const Y = layoutStickers(spec); // niente sovrapposizioni tra pulsanti, testi e sottotitoli
+  const Y = layoutStickers(spec, aspectResolver(media)); // niente sovrapposizioni tra pulsanti, testi e sottotitoli
   for (const st of spec.stickers ?? []) {
     const def = STICKERS[st.kind];
     const label = assText((st.label || def.label).toUpperCase());
@@ -195,7 +220,7 @@ export async function renderFinal(job: Job, spec: EditSpec): Promise<void> {
   const work = path.join(paths.tmp, job.jobId);
   await fs.mkdir(work, { recursive: true });
   const assPath = path.join(work, 'final.ass');
-  await fs.writeFile(assPath, buildAss(words, spec), 'utf8');
+  await fs.writeFile(assPath, buildAss(words, spec, job.media), 'utf8');
 
   const inputs: string[] = ['-i', job.sourcePath];
   const chain: string[] = [
@@ -212,13 +237,17 @@ export async function renderFinal(job: Job, spec: EditSpec): Promise<void> {
     const end = Math.min(Math.max(o.end, start + 0.2), outLen);
     if (end <= start) continue;
     n++;
-    if (media.kind === 'image') inputs.push('-loop', '1', '-i', media.path);
-    else inputs.push('-i', media.path);
-    const fit = o.mode === 'full'
-      ? 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920'
-      : 'scale=460:-2';
-    const PIP = { 'top-left': '50:220', 'top-right': 'W-w-50:220', center: '(W-w)/2:(H-h)/2', 'bottom-left': '50:H-h-640', 'bottom-right': 'W-w-50:H-h-640' } as const;
-    const pos = o.mode === 'full' ? '0:0' : PIP[o.position ?? 'top-right'];
+    const src = overlaySource(o, media);
+    if (media.kind === 'image') inputs.push('-loop', '1', '-i', src.file);
+    else inputs.push('-i', src.file);
+    let fit = 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920';
+    let pos = '0:0';
+    if (src.aspect != null) {
+      // Riquadro o foto scontornata: scalata intera (niente ritagli), alla posizione calcolata.
+      const b = overlayBox(o, src.aspect);
+      fit = media.kind === 'video' && !media.aspect ? `scale=${b.w}:-2` : `scale=${b.w}:${b.h}`;
+      pos = `${b.left}:${b.top}`;
+    }
     const prep = media.kind === 'video'
       ? `trim=duration=${(end - start).toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB,`
       : '';

@@ -44,6 +44,10 @@ export interface OverlayItem {
   mode: 'full' | 'pip';
   position?: 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
   search?: string; // immagine cercata online dall'IA
+  cutout?: boolean; // foto: usa la versione senza sfondo (default sì, se disponibile)
+  x?: number; // centro e larghezza scelti a mano, px su 1080×1920
+  y?: number;
+  w?: number;
 }
 
 export type StickerKind = 'follow' | 'like' | 'subscribe' | 'comment' | 'share' | 'link';
@@ -70,6 +74,9 @@ export interface MediaItem {
   kind: 'image' | 'video';
   name: string;
   duration?: number;
+  aspect?: number; // altezza / larghezza
+  cutout?: boolean; // il backend ha preparato la versione scontornata
+  cutoutAspect?: number;
 }
 
 export interface Job {

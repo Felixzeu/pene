@@ -5,10 +5,11 @@ import { promises as fs } from 'fs';
 import { z } from 'zod';
 import { paths } from '../config';
 import { createJob, getJob, requeue, saveJobs } from '../lib/queue';
-import { probeDuration, renderFinal, specSchema } from '../lib/render';
+import { probeDuration, renderFinal, specSchema, type MediaItem } from '../lib/render';
 import { generateEditSpec } from '../lib/llm';
 import { AppError, ERR } from '../lib/errors';
 import { fetchWebImage } from '../lib/webmedia';
+import { prepareImage } from '../lib/cutout';
 
 const upload = multer({
   dest: paths.tmp,
@@ -67,7 +68,7 @@ editRouter.get('/:jobId', (req, res) => {
     hashtags: job.hashtags,
     spec: job.spec,
     duration: job.duration,
-    media: job.media?.map(({ id, kind, name, duration }) => ({ id, kind, name, duration })),
+    media: job.media?.map(mediaInfo),
   });
 });
 
@@ -84,6 +85,10 @@ function readyJob(jobId: string | undefined) {
   if (job.stage !== 'ready' && job.stage !== 'error') throw new AppError('Il video è ancora in lavorazione: aspetta che finisca.', 409);
   return job;
 }
+
+/** Quello che l'app sa di un media (niente percorsi del server). */
+const mediaInfo = ({ id, kind, name, duration, aspect, cutoutPath, cutoutAspect }: MediaItem) =>
+  ({ id, kind, name, duration, aspect, cutout: !!cutoutPath, cutoutAspect });
 
 // POST /api/edit/:jobId/media — carica una foto o un video da inserire nel montaggio.
 editRouter.post('/:jobId/media', mediaUpload.single('file') as unknown as express.RequestHandler, async (req, res, next) => {
@@ -103,10 +108,11 @@ editRouter.post('/:jobId/media', mediaUpload.single('file') as unknown as expres
     const id = `m${(job.media?.length ?? 0) + 1}`;
     const dest = path.join(dir, `${id}${ext}`);
     await fs.rename(req.file.path, dest);
-    const item = { id, kind, name: (req.file.originalname || id).slice(0, 80), path: dest, duration: kind === 'video' ? await probeDuration(dest) : undefined } as const;
+    // Le foto vengono anche scontornate (soggetto senza sfondo) per incollarle sul video.
+    const item = await prepareImage({ id, kind, name: (req.file.originalname || id).slice(0, 80), path: dest, duration: kind === 'video' ? await probeDuration(dest) : undefined });
     job.media = [...(job.media ?? []), item];
     saveJobs();
-    res.json({ id, kind, name: item.name, duration: item.duration });
+    res.json(mediaInfo(item));
   } catch (e) {
     next(e);
   }
@@ -117,7 +123,8 @@ editRouter.get('/:jobId/media/:mediaId', (req, res, next) => {
   const job = getJob(req.params.jobId ?? '');
   const m = job?.media?.find((x) => x.id === req.params.mediaId);
   if (!m) { next(new AppError('Media non trovato.', 404)); return; }
-  res.sendFile(path.resolve(m.path), { maxAge: '1h' });
+  const file = req.query.cutout === '1' && m.cutoutPath ? m.cutoutPath : m.path;
+  res.sendFile(path.resolve(file), { maxAge: '1h' });
 });
 
 // POST /api/edit/:jobId/ai — l'IA traduce una richiesta a parole in una spec di montaggio.
@@ -130,11 +137,11 @@ editRouter.post('/:jobId/ai', async (req, res, next) => {
       spec: body.spec,
       words: job.words ?? [],
       duration: job.duration ?? 0,
-      media: (job.media ?? []).map(({ id, kind, name, duration }) => ({ id, kind, name, duration })),
+      media: (job.media ?? []).map(mediaInfo),
       fetchImage: (q) => fetchWebImage(job, q),
     });
     saveJobs();
-    res.json({ ...out, media: (job.media ?? []).map(({ id, kind, name, duration }) => ({ id, kind, name, duration })) });
+    res.json({ ...out, media: (job.media ?? []).map(mediaInfo) });
   } catch (e) {
     next(e);
   }

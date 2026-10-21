@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { Image, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { VideoView, type VideoPlayer } from 'expo-video';
 import { colors } from '../theme';
-import type { EditSpec, MediaItem, StickerKind, Word } from '../types';
-import { layoutStickers } from '../lib/stickerLayout';
+import type { EditSpec, MediaItem, OverlayItem, StickerKind, Word } from '../types';
+import { layoutStickers, overlayBox } from '../lib/stickerLayout';
 
 // Anteprima live del montaggio: il video tagliato (senza nulla incollato) con sopra
 // testi, sottotitoli, sticker e immagini disegnati dall'app nei tempi giusti.
@@ -19,6 +19,50 @@ const STICKER: Record<StickerKind, { label: string; bg: string }> = {
   link: { label: 'LINK IN BIO', bg: '#FF5CC8' },
 };
 const TEXT_SIZE = { small: 56, medium: 72, large: 96 } as const;
+
+/** Come overlaySource nel backend: usa la foto scontornata? e proporzioni (null = copre tutto lo schermo). */
+export function overlayLook(o: OverlayItem, m?: MediaItem): { cut: boolean; aspect: number | null } {
+  const cut = m?.kind === 'image' && o.cutout !== false && !!m.cutout;
+  if (o.mode === 'full' && !cut) return { cut, aspect: null };
+  return { cut, aspect: (cut ? m?.cutoutAspect : m?.aspect) ?? 1 };
+}
+
+/** Riquadro trascinabile col dito: muove il centro della foto, salva alla fine del gesto. */
+function DragBox({ box, s, onMove, onDrag, children }: {
+  box: { left: number; top: number; w: number; h: number };
+  s: number;
+  onMove: (x: number, y: number) => void;
+  onDrag?: (dragging: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const [d, setD] = useState({ x: 0, y: 0 });
+  const ref = useRef({ box, s, onMove, onDrag });
+  ref.current = { box, s, onMove, onDrag };
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => ref.current.onDrag?.(true),
+    onPanResponderMove: (_e, g) => setD({ x: g.dx, y: g.dy }),
+    onPanResponderRelease: (_e, g) => {
+      const { box: b, s: k } = ref.current;
+      const cx = Math.round(Math.max(0, Math.min(1080, b.left + b.w / 2 + g.dx / k)));
+      const cy = Math.round(Math.max(0, Math.min(1920, b.top + b.h / 2 + g.dy / k)));
+      setD({ x: 0, y: 0 });
+      ref.current.onMove(cx, cy);
+      ref.current.onDrag?.(false);
+    },
+    onPanResponderTerminate: () => { setD({ x: 0, y: 0 }); ref.current.onDrag?.(false); },
+  })).current;
+  return (
+    <View
+      {...pan.panHandlers}
+      style={[styles.dragBox, { left: box.left * s + d.x, top: box.top * s + d.y, width: box.w * s, height: box.h * s }]}
+    >
+      {children}
+    </View>
+  );
+}
 
 /** Gruppi di max 4 parole come nel video finale. */
 function pageAt(words: Word[], t: number): { words: Word[]; current: Word } | null {
@@ -38,13 +82,17 @@ function pageAt(words: Word[], t: number): { words: Word[]; current: Word } | nu
   return null;
 }
 
-export default function LivePreview({ player, spec, words, media, duration, mediaUri }: {
+export default function LivePreview({ player, spec, words, media, duration, mediaUri, selectedId, onMoveOverlay, onDrag }: {
   player: VideoPlayer;
   spec: EditSpec;
   words: Word[];
   media: MediaItem[];
   duration: number;
-  mediaUri: (id: string) => string;
+  mediaUri: (id: string, cutout: boolean) => string;
+  /** Foto da spostare: resta visibile e si trascina col dito. */
+  selectedId?: string | null;
+  onMoveOverlay?: (id: string, x: number, y: number) => void;
+  onDrag?: (dragging: boolean) => void;
 }) {
   const [w, setW] = useState(0);
   const [t, setT] = useState(0); // tempo sul video FINALE (dopo il taglio iniziale)
@@ -67,34 +115,38 @@ export default function LivePreview({ player, spec, words, media, duration, medi
   const s = w / 1080; // scala da 1080 px
   const shifted = words.map((x) => ({ ...x, start: x.start - spec.trimStart, end: x.end - spec.trimStart }));
   const sub = spec.subtitles ? pageAt(shifted, t) : null;
-  const stickerY = layoutStickers({ ...spec, stickers: spec.stickers ?? [] });
+  const aspectOf = (o: OverlayItem) => overlayLook(o, media.find((x) => x.id === o.mediaId)).aspect;
+  const stickerY = layoutStickers({ ...spec, stickers: spec.stickers ?? [] }, (o) => aspectOf(o as OverlayItem));
   const on = (a: { start: number; end: number }) => t >= a.start && t < Math.max(a.end, a.start + 0.2);
+  const selected = spec.overlays.find((o) => o.id === selectedId);
 
   return (
     <View style={styles.wrap} onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)}>
       <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
       {w > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {spec.overlays.filter(on).map((o) => {
+          {spec.overlays.filter((o) => on(o) && o.id !== selectedId).map((o) => {
             const m = media.find((x) => x.id === o.mediaId);
-            const pipW = 460 * s;
-            const pos = o.mode === 'full' ? { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 } : {
-              position: 'absolute' as const, width: pipW, height: pipW,
-              ...({
-                'top-left': { left: 50 * s, top: 220 * s },
-                'top-right': { right: 50 * s, top: 220 * s },
-                center: { left: (w - pipW) / 2, top: (w * 16 / 9 - pipW) / 2 },
-                'bottom-left': { left: 50 * s, bottom: 640 * s },
-                'bottom-right': { right: 50 * s, bottom: 640 * s },
-              }[o.position ?? 'top-right']),
-            };
+            const look = overlayLook(o, m);
+            const b = look.aspect == null ? null : overlayBox(o, look.aspect);
+            const pos = b
+              ? { position: 'absolute' as const, left: b.left * s, top: b.top * s, width: b.w * s, height: b.h * s }
+              : { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 };
             return m?.kind === 'image' ? (
-              <Image key={o.id} source={{ uri: mediaUri(m.id) }} style={[pos, o.mode === 'pip' && { borderRadius: 12 * s }]} resizeMode={o.mode === 'full' ? 'cover' : 'contain'} />
+              <Image
+                key={o.id}
+                source={{ uri: mediaUri(m.id, look.cut) }}
+                style={[pos, b && !look.cut && { borderRadius: 12 * s }]}
+                resizeMode={b ? 'contain' : 'cover'}
+              />
             ) : (
               <View key={o.id} style={[pos, styles.videoBox]}><Text style={styles.videoText}>VIDEO</Text></View>
             );
           })}
-
+        </View>
+      )}
+      {w > 0 && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {sub && (
             <View style={[styles.lineBox, { bottom: 560 * s }]}>
               <Text style={[styles.outline, { fontSize: 74 * s, lineHeight: 88 * s }]}>
@@ -130,7 +182,20 @@ export default function LivePreview({ player, spec, words, media, duration, medi
           })}
         </View>
       )}
-      <View style={styles.badge}><Text style={styles.badgeText}>ANTEPRIMA</Text></View>
+      {w > 0 && selected && (() => {
+        const m = media.find((x) => x.id === selected.mediaId);
+        const look = overlayLook(selected, m);
+        if (look.aspect == null) return null; // a schermo intero non si sposta
+        const b = overlayBox(selected, look.aspect);
+        return (
+          <DragBox box={b} s={s} onDrag={onDrag} onMove={(x, y) => onMoveOverlay?.(selected.id, x, y)}>
+            {m?.kind === 'image'
+              ? <Image source={{ uri: mediaUri(m.id, look.cut) }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+              : <View style={[StyleSheet.absoluteFill, styles.videoBox]}><Text style={styles.videoText}>VIDEO</Text></View>}
+          </DragBox>
+        );
+      })()}
+      <View style={styles.badge}><Text style={styles.badgeText}>{selected ? 'TRASCINA LA FOTO' : 'ANTEPRIMA'}</Text></View>
     </View>
   );
 }
@@ -149,6 +214,7 @@ const styles = StyleSheet.create({
     position: 'absolute', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 4, shadowOffset: { width: 3, height: 3 },
   },
+  dragBox: { position: 'absolute', borderWidth: 2, borderColor: colors.accent, borderStyle: 'dashed', borderRadius: 6 },
   videoBox: { backgroundColor: 'rgba(161,92,255,0.35)', alignItems: 'center', justifyContent: 'center' },
   videoText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   badge: { position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },

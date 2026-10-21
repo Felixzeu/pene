@@ -3,12 +3,13 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  AlertTriangle, BadgePlus, CheckCircle2, Clock, Eye, ImagePlus, Plus, Sparkles, Trash2, Type as TypeIcon, Wand2,
+  AlertTriangle, BadgePlus, CheckCircle2, Clock, Eye, ImagePlus, Minus, Move, Plus, Sparkles, Trash2, Type as TypeIcon, Wand2,
 } from 'lucide-react-native';
 import { Badge, Btn, ChipRow, Field, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { aiEdit, getJob, jobMediaUrl, renderEdit, uploadMedia } from '../services/api';
-import LivePreview from '../components/LivePreview';
+import LivePreview, { overlayLook } from '../components/LivePreview';
+import { overlayBox } from '../lib/stickerLayout';
 import { upsertProject } from '../services/history';
 import type { EditSpec, Job, OverlayItem, Project, StickerItem, StickerKind, TextItem } from '../types';
 
@@ -48,6 +49,8 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopRef = useRef(false);
+  const [moving, setMoving] = useState<string | null>(null); // foto che si sta spostando a mano
+  const [dragging, setDragging] = useState(false);
 
   const [showFinal, setShowFinal] = useState(false);
   const videoUrl = job?.finalVideoUrl ?? null;
@@ -75,6 +78,27 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     setSpec((s) => ({ ...s, texts: s.texts.map((t) => (t.id === id ? { ...t, ...p } : t)) }));
   const patchOverlay = (id: string, p: Partial<OverlayItem>) =>
     setSpec((s) => ({ ...s, overlays: s.overlays.map((o) => (o.id === id ? { ...o, ...p } : o)) }));
+  // "Sposta": ferma l'anteprima nel momento della foto, così resta visibile mentre la trascini.
+  const toggleMove = (o: OverlayItem) => {
+    if (moving === o.id) { setMoving(null); previewPlayer.play(); return; }
+    setShowFinal(false);
+    player.pause();
+    previewPlayer.pause();
+    previewPlayer.currentTime = spec.trimStart + o.start + Math.min(0.3, (o.end - o.start) / 2);
+    setMoving(o.id);
+  };
+  const resize = (o: OverlayItem, factor: number) => {
+    const m = job?.media?.find((x) => x.id === o.mediaId);
+    const look = overlayLook(o, m);
+    if (look.aspect == null) return;
+    const b = overlayBox(o, look.aspect);
+    // Tiene fermo il centro: se la foto era in un angolo, da ora ha una posizione libera.
+    patchOverlay(o.id, {
+      w: Math.round(Math.max(160, Math.min(1080, b.w * factor))),
+      x: Math.round(b.left + b.w / 2),
+      y: Math.round(b.top + b.h / 2),
+    });
+  };
   const patchSticker = (id: string, p: Partial<StickerItem>) =>
     setSpec((s) => ({ ...s, stickers: s.stickers.map((o) => (o.id === id ? { ...o, ...p } : o)) }));
   const addSticker = (kind: StickerKind) => {
@@ -114,15 +138,18 @@ export default function ModifyScreen({ project, onBack, onDone }: {
       // L'IA sceglie momento, durata, schermo intero o riquadro guardando cosa dici nel video.
       setAiBusy(true);
       try {
-        const out = await aiEdit(jobId, `Inserisci il nuovo media "${media.id}" (${media.kind}, "${media.name}") nel punto più adatto in base alla trascrizione, con durata, modalità e posizione ottimali. Non cambiare nient'altro.`, spec);
+        const cut = media.cutout ? ' La foto è già scontornata (senza sfondo): usala con "cutout": true come elemento sopra il video.' : '';
+        const out = await aiEdit(jobId, `Inserisci il nuovo media "${media.id}" (${media.kind}, "${media.name}") nel punto più adatto in base alla trascrizione, con durata, modalità, grandezza e posizione ottimali.${cut} Non cambiare nient'altro.`, spec);
         setSpec(out.spec);
-        setAiSummary(`${out.summary} Guarda l'anteprima e, se va bene, premi Applica modifiche.`);
+        setAiSummary(`${out.summary} Guarda l'anteprima: con "Sposta" puoi trascinarla dove vuoi. Poi premi Applica modifiche.`);
       } catch {
         const start = now();
         const len = media.kind === 'video' && media.duration ? Math.min(media.duration, 5) : 3;
         setSpec((s) => ({
           ...s,
-          overlays: [...s.overlays, { id: newId('o'), mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'full' }],
+          overlays: [...s.overlays, media.cutout
+            ? { id: newId('o'), mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'pip', position: 'bottom-right', w: 560, cutout: true }
+            : { id: newId('o'), mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'full' }],
         }));
       } finally {
         setAiBusy(false);
@@ -137,6 +164,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   // Export con le modifiche e polling finché non è pronto.
   const render = async (next: EditSpec) => {
     setError(null);
+    setMoving(null);
     setRendering(true);
     try {
       await renderEdit(jobId, { ...next, texts: next.texts.filter((t) => t.text.trim()) });
@@ -185,7 +213,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   return (
     <Screen>
       <Header title="Modifica il video" subtitle="Testi, foto e video, o chiedi all'IA" onBack={onBack} />
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging}>
         {showFinal && videoUrl ? (
           <View style={styles.playerWrap}>
             <VideoView player={player} style={styles.player} contentFit="contain" />
@@ -197,7 +225,10 @@ export default function ModifyScreen({ project, onBack, onDone }: {
             words={job?.words ?? []}
             media={job?.media ?? []}
             duration={job?.duration ?? 0}
-            mediaUri={(id) => jobMediaUrl(jobId, id)}
+            mediaUri={(id, cut) => jobMediaUrl(jobId, id, cut)}
+            selectedId={moving}
+            onMoveOverlay={(id, x, y) => patchOverlay(id, { x, y })}
+            onDrag={setDragging}
           />
         ) : null}
         <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -293,11 +324,36 @@ export default function ModifyScreen({ project, onBack, onDone }: {
               </View>
               <TimeRow start={o.start} end={o.end} onChange={(p) => patchOverlay(o.id, p)} now={now} />
               <ChipRow options={Object.keys(MODES)} value={labelOf(MODES, o.mode)} onChange={(v) => patchOverlay(o.id, { mode: MODES[v as keyof typeof MODES] })} />
-              {o.mode === 'pip' && (
+              {m?.kind === 'image' && m.cutout && (
                 <View style={{ marginTop: 8 }}>
-                  <ChipRow options={Object.keys(PIP_POS)} value={labelOf(PIP_POS, o.position ?? 'top-right')} onChange={(v) => patchOverlay(o.id, { position: PIP_POS[v as keyof typeof PIP_POS] })} />
+                  <ChipRow
+                    options={['Sfondo tolto', 'Foto intera']}
+                    value={o.cutout === false ? 'Foto intera' : 'Sfondo tolto'}
+                    onChange={(v) => patchOverlay(o.id, { cutout: v === 'Sfondo tolto' })}
+                  />
                 </View>
               )}
+              {o.mode === 'pip' && (
+                <View style={{ marginTop: 8 }}>
+                  <ChipRow
+                    options={Object.keys(PIP_POS)}
+                    value={o.x != null ? '' : labelOf(PIP_POS, o.position ?? 'top-right')}
+                    onChange={(v) => patchOverlay(o.id, { position: PIP_POS[v as keyof typeof PIP_POS], x: undefined, y: undefined })}
+                  />
+                </View>
+              )}
+              {overlayLook(o, m).aspect != null && (
+                <View style={styles.moveRow}>
+                  <Pressable onPress={() => toggleMove(o)} style={[styles.moveBtn, moving === o.id && styles.moveBtnOn]}>
+                    <Move size={15} color={moving === o.id ? '#0B0716' : colors.text} />
+                    <Text style={[styles.moveText, moving === o.id && { color: '#0B0716' }]}>{moving === o.id ? 'Fatto' : 'Sposta'}</Text>
+                  </Pressable>
+                  <Pressable hitSlop={6} onPress={() => resize(o, 1 / 1.15)} style={styles.sizeBtn}><Minus size={16} color={colors.text} /></Pressable>
+                  <Pressable hitSlop={6} onPress={() => resize(o, 1.15)} style={styles.sizeBtn}><Plus size={16} color={colors.text} /></Pressable>
+                  {o.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
+                </View>
+              )}
+              {moving === o.id && <Text style={styles.moveHint}>Trascina la foto nell'anteprima qui sopra.</Text>}
             </View>
           );
         })}
@@ -418,6 +474,18 @@ function NumInput({ value, onChange }: { value: number; onChange: (n: number) =>
 }
 
 const styles = StyleSheet.create({
+  moveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  moveBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 36, borderRadius: 999,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
+  },
+  moveBtnOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  moveText: { color: colors.text, fontWeight: '700', fontSize: 13 },
+  sizeBtn: {
+    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
+  },
+  moveHint: { color: colors.textDim, fontSize: 12, marginTop: 6 },
   playerWrap: {
     borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
     aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 16,

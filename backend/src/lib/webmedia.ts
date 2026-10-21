@@ -4,6 +4,7 @@ import { paths } from '../config';
 import { AppError } from './errors';
 import type { Job } from './queue';
 import type { MediaItem } from './render';
+import { prepareImage } from './cutout';
 
 // Immagini prese da internet quando l'utente chiede qualcosa che non ha caricato
 // ("metti una foto della Torre Eiffel"). Fonti gratuite e senza chiave:
@@ -63,7 +64,7 @@ export async function fetchWebImage(job: Job, query: string): Promise<MediaItem>
       const id = `w${(job.media?.length ?? 0) + 1}`;
       const dest = path.join(dir, `${id}${ext}`);
       await fs.writeFile(dest, buf);
-      const item: MediaItem = { id, kind: 'image', name: `${query} (da internet)`.slice(0, 80), path: dest };
+      const item = await prepareImage({ id, kind: 'image', name: `${query} (da internet)`.slice(0, 80), path: dest });
       job.media = [...(job.media ?? []), item];
       console.log(`[web] "${query}" → ${url}`);
       return item;

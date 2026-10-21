@@ -200,7 +200,8 @@ Formato della spec:
  "subtitles": true|false,
  "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
  "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
-               "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right"}],
+               "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right",
+               "cutout": true|false, "w": larghezza in px (120-1080, facoltativo), "x": px, "y": px (centro, facoltativi)}],
  "stickers": [{"id": string, "kind": "follow"|"like"|"subscribe"|"comment"|"share"|"link", "label": testo facoltativo, "start": s, "end": s, "position": "top"|"center"|"bottom"}]}
 Strumenti:
 - "stickers" sono pulsanti animati già pronti: follow = "+ SEGUI" / tasto segui, like = "♥ MI PIACE", subscribe = "ISCRIVITI",
@@ -214,6 +215,10 @@ Regole di posizionamento (fai scelte da montatore esperto):
 - Durata: testi 2-3 s, immagini 2-4 s, sticker 2.5 s, salvo indicazioni.
 - Con i sottotitoli attivi non mettere testi in basso: usa "top" (o "center" per un titolo d'impatto).
 - Foto orizzontali o loghi: "pip" (riquadro) in "top-right"; foto che devono riempire lo schermo: "full". Non coprire il viso troppo a lungo.
+- I media con "cutout": true hanno già il soggetto ritagliato (senza sfondo): usali con "cutout": true, "mode": "pip",
+  "w" tra 450 e 700 e un angolo che non copra il viso (di solito "bottom-left" o "bottom-right"). Metti "cutout": false
+  solo se l'utente vuole la foto intera con lo sfondo. Le coordinate su schermo sono 1080×1920 px.
+- "x"/"y" sono la posizione scelta a mano dall'utente: non cambiarle se non te lo chiede; se chiede di spostare una foto in un angolo, toglile.
 - Non sovrapporre nello stesso istante due elementi nella stessa posizione.
 - Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.
 - Se la richiesta non è una modifica realizzabile con questi strumenti, rispondi {"error": "spiegazione breve in italiano"}.`;
@@ -223,7 +228,7 @@ export async function generateEditSpec(p: {
   spec: EditSpec;
   words: { word: string; start: number; end: number }[];
   duration: number;
-  media: { id: string; kind: string; name: string; duration?: number }[];
+  media: { id: string; kind: string; name: string; duration?: number; cutout?: boolean; aspect?: number; cutoutAspect?: number }[];
   /** Scarica da internet un'immagine per un overlay con "search" e ne restituisce l'id. */
   fetchImage?: (query: string) => Promise<{ id: string; kind: string; name: string }>;
 }): Promise<{ spec: EditSpec; summary: string }> {
