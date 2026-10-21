@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Mail } from 'lucide-react-native';
 import { Btn, Input, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
-import { resetPassword, signIn, signInWith, signUp } from '../services/auth';
+import { enabledProviders, resetPassword, signIn, signInWith, signUp } from '../services/auth';
 
 // Registrazione e accesso: email e password, oppure Google / Apple in un tocco.
 export default function AuthScreen() {
@@ -13,6 +13,8 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState<null | 'email' | 'google' | 'apple'>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [social, setSocial] = useState({ google: false, apple: false });
+  useEffect(() => { enabledProviders().then(setSocial); }, []);
   const validEmail = /^\S+@\S+\.\S+$/.test(email.trim());
 
   const run = async (kind: 'email' | 'google' | 'apple', fn: () => Promise<void>) => {
@@ -49,7 +51,7 @@ export default function AuthScreen() {
             {mode === 'login' ? 'Accedi per ritrovare i tuoi video e i social collegati.' : 'Gratis. Ti servono solo email e password.'}
           </Text>
 
-          {Platform.OS === 'ios' && (
+          {Platform.OS === 'ios' && social.apple && (
             <Btn
               label="Continua con Apple"
               variant="ghost"
@@ -60,7 +62,7 @@ export default function AuthScreen() {
               style={styles.social}
             />
           )}
-          <Btn
+          {social.google && <Btn
             label="Continua con Google"
             variant="ghost"
             icon={<Text style={[styles.brand, { color: '#4285F4' }]}>G</Text>}
@@ -68,11 +70,13 @@ export default function AuthScreen() {
             loading={busy === 'google'}
             disabled={!!busy}
             style={styles.social}
-          />
+          />}
 
-          <View style={styles.orRow}>
-            <View style={styles.line} /><Text style={styles.or}>oppure con l'email</Text><View style={styles.line} />
-          </View>
+          {(social.google || (Platform.OS === 'ios' && social.apple)) && (
+            <View style={styles.orRow}>
+              <View style={styles.line} /><Text style={styles.or}>oppure con l'email</Text><View style={styles.line} />
+            </View>
+          )}
 
           <Input
             value={email}

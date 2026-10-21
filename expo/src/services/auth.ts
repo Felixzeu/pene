@@ -100,6 +100,17 @@ export async function signInWith(provider: 'google' | 'apple') {
   if (e2) throw new Error(it(e2.message));
 }
 
+/** Quali accessi social sono attivi su Supabase (per mostrare solo i pulsanti che funzionano). */
+export async function enabledProviders(): Promise<{ google: boolean; apple: boolean }> {
+  try {
+    const r = await fetch(`${URL}/auth/v1/settings`, { headers: { apikey: ANON } });
+    const d = (await r.json()) as { external?: Record<string, boolean> };
+    return { google: !!d.external?.google, apple: !!d.external?.apple };
+  } catch {
+    return { google: false, apple: false };
+  }
+}
+
 export async function signOut() {
   await supabase?.auth.signOut();
   token = null;
