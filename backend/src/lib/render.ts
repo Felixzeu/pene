@@ -6,6 +6,7 @@ import { paths } from '../config';
 import { AppError, ERR } from './errors';
 import type { Job } from './queue';
 import type { Word } from './whisper';
+import { layoutStickers } from './stickerLayout';
 
 // Export finale configurabile: parte dal video già tagliato e ripulito
 // (lo stesso dell'anteprima) e applica le modifiche scelte nell'app o dall'IA:
@@ -160,7 +161,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${style},,0,0,0,,{\\fs${SIZE[t.size]}}${assText(t.text)}`);
   }
   // Pulsanti: rettangolo arrotondato disegnato in ASS + testo, con entrata "pop" e una pulsazione.
-  const Y = { top: 330, center: 960, bottom: 1540 } as const;
+  const Y = layoutStickers(spec); // niente sovrapposizioni tra pulsanti, testi e sottotitoli
   for (const st of spec.stickers ?? []) {
     const def = STICKERS[st.kind];
     const label = assText((st.label || def.label).toUpperCase());
@@ -168,7 +169,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     const h = 130;
     const r = h / 2;
     const box = `m ${r} 0 l ${w - r} 0 b ${w} 0 ${w} ${h} ${w - r} ${h} l ${r} ${h} b 0 ${h} 0 0 ${r} 0`;
-    const y = Y[st.position];
+    const y = Y[st.id];
     const anim = '\\fscx0\\fscy0\\t(0,180,\\fscx112\\fscy112)\\t(180,300,\\fscx100\\fscy100)\\t(900,1100,\\fscx106\\fscy106)\\t(1100,1300,\\fscx100\\fscy100)';
     const t0 = fmtTime(st.start);
     const t1 = fmtTime(Math.max(st.end, st.start + 0.5));

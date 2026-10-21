@@ -3,6 +3,7 @@ import { Image, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { VideoView, type VideoPlayer } from 'expo-video';
 import { colors } from '../theme';
 import type { EditSpec, MediaItem, StickerKind, Word } from '../types';
+import { layoutStickers } from '../lib/stickerLayout';
 
 // Anteprima live del montaggio: il video tagliato (senza nulla incollato) con sopra
 // testi, sottotitoli, sticker e immagini disegnati dall'app nei tempi giusti.
@@ -18,7 +19,6 @@ const STICKER: Record<StickerKind, { label: string; bg: string }> = {
   link: { label: 'LINK IN BIO', bg: '#FF5CC8' },
 };
 const TEXT_SIZE = { small: 56, medium: 72, large: 96 } as const;
-const STICKER_Y = { top: 330, center: 960, bottom: 1540 } as const;
 
 /** Gruppi di max 4 parole come nel video finale. */
 function pageAt(words: Word[], t: number): { words: Word[]; current: Word } | null {
@@ -67,6 +67,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
   const s = w / 1080; // scala da 1080 px
   const shifted = words.map((x) => ({ ...x, start: x.start - spec.trimStart, end: x.end - spec.trimStart }));
   const sub = spec.subtitles ? pageAt(shifted, t) : null;
+  const stickerY = layoutStickers({ ...spec, stickers: spec.stickers ?? [] });
   const on = (a: { start: number; end: number }) => t >= a.start && t < Math.max(a.end, a.start + 0.2);
 
   return (
@@ -122,7 +123,7 @@ export default function LivePreview({ player, spec, words, media, duration, medi
             const bw = Math.max(360, Math.min(900, 70 + label.length * 42)) * s;
             const bh = 130 * s;
             return (
-              <View key={x.id} style={[styles.sticker, { width: bw, height: bh, borderRadius: bh / 2, backgroundColor: def.bg, left: (w - bw) / 2, top: STICKER_Y[x.position] * s - bh / 2 }]}>
+              <View key={x.id} style={[styles.sticker, { width: bw, height: bh, borderRadius: bh / 2, backgroundColor: def.bg, left: (w - bw) / 2, top: (stickerY[x.id] ?? 960) * s - bh / 2 }]}>
                 <Text style={{ color: '#fff', fontWeight: '900', fontSize: 62 * s }}>{label}</Text>
               </View>
             );
