@@ -64,7 +64,10 @@ export async function deleteSupabaseUser(id: string): Promise<void> {
   }
   const r = await fetch(`${config.supabase.url}/auth/v1/admin/users/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: { apikey: config.supabase.serviceKey, Authorization: `Bearer ${config.supabase.serviceKey}` },
+    // Le nuove chiavi "sb_secret_..." vanno solo in apikey; le vecchie service_role (JWT) anche in Authorization.
+    headers: config.supabase.serviceKey.startsWith('sb_')
+      ? { apikey: config.supabase.serviceKey }
+      : { apikey: config.supabase.serviceKey, Authorization: `Bearer ${config.supabase.serviceKey}` },
   });
   if (!r.ok && r.status !== 404) throw new AppError(`Supabase non ha eliminato l'account (errore ${r.status}).`, 502);
   for (const [k, v] of cache) if (v.user.id === id) cache.delete(k);
