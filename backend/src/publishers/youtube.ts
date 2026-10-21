@@ -9,6 +9,16 @@ import type { PublishMeta, PublishResult } from './index';
 export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> => {
   const accessToken = await freshAccessToken('youtube');
 
+  // 0. L'account scelto al login deve avere un canale YouTube (senza canale Google risponde 404/401).
+  const ch = await fetch('https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const chData = (await ch.json().catch(() => ({}))) as { items?: { id: string; snippet?: { title?: string } }[]; error?: { message?: string } };
+  console.log(`[YouTube] canale: HTTP ${ch.status}`, JSON.stringify(chData.error ?? chData.items?.map((c) => c.snippet?.title ?? c.id) ?? []));
+  if (ch.ok && !chData.items?.length) {
+    throw new AppError(ERR.publishFailed('YouTube', 'l account Google collegato non ha un canale YouTube. Se il canale è di un account Brand, ricollega YouTube e scegli il canale (non l account personale).'), 400);
+  }
+
   // 1. Apri una sessione di upload "resumable".
   const init = await fetch(
     'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
@@ -36,7 +46,7 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
     const reason = /quotaExceeded/.test(t) ? 'quota giornaliera di YouTube esaurita, riprova domani'
       : /youtubeSignupRequired/.test(t) ? 'il tuo account Google non ha ancora un canale YouTube: crealo su youtube.com'
       : init.status === 401 || init.status === 403 ? 'permessi mancanti: premi Collega su YouTube e autorizza di nuovo'
-      : `errore ${init.status}`;
+      : `errore ${init.status}: ${googleReason(t)}`;
     throw new AppError(ERR.publishFailed('YouTube', reason), 502);
   }
   const uploadUrl = init.headers.get('location');
@@ -53,6 +63,7 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
   console.log(`[YouTube] upload: HTTP ${upload.status}`);
   if (!upload.ok) {
     const t = await upload.text().catch(() => '');
+    console.error(`[YouTube] upload rifiutato (${upload.status}):`, t.slice(0, 500));
     throw new AppError(ERR.publishFailed('YouTube', t.slice(0, 200) || `errore ${upload.status}`), 502);
   }
   const data = (await upload.json()) as { id?: string };
@@ -62,3 +73,13 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
     message: (process.env.YOUTUBE_PRIVACY ?? 'private') === 'private' ? 'Caricato su YouTube come privato: rendilo pubblico da YouTube Studio.' : 'Pubblicato su YouTube',
   };
 };
+
+/** Il messaggio leggibile dentro una risposta di errore di Google. */
+function googleReason(body: string): string {
+  try {
+    const j = JSON.parse(body) as { error?: { message?: string; errors?: { reason?: string }[] } };
+    return (j.error?.errors?.[0]?.reason ?? '') + (j.error?.message ? ` ${j.error.message}` : '');
+  } catch {
+    return body.slice(0, 120);
+  }
+}
