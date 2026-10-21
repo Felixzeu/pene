@@ -4,11 +4,9 @@ import { AppError, ERR } from '../lib/errors';
 import { freshAccessToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
 
-// TikTok Content Posting API (gratuita). LIMITI delle app non ancora approvate (audit):
-//  - Direct Post: solo video PRIVATI (SELF_ONLY) e solo se l'account TikTok è privato;
-//  - in alternativa "Upload" (inbox): il video arriva nelle notifiche/bozze di TikTok
-//    e lo pubblichi tu dall'app TikTok, senza vincoli sull'account.
-// Qui si prova il Direct Post e, se TikTok lo rifiuta per questi limiti, si passa all'Upload.
+// TikTok Content Posting API (gratuita), Direct Post: il video viene pubblicato subito
+// come PRIVATO (SELF_ONLY). Finché l'app non è approvata da TikTok (audit) funziona
+// solo se anche l'account TikTok è privato.
 
 const API = 'https://open.tiktokapis.com/v2';
 
@@ -79,54 +77,57 @@ export const tiktokPublish = async (meta: PublishMeta): Promise<PublishResult> =
   const { chunk, count } = chunking(size);
   const source_info = { source: 'FILE_UPLOAD', video_size: size, chunk_size: chunk, total_chunk_count: count };
 
-  // 1. Le linee guida chiedono di leggere prima le opzioni del creator (privacy consentite ecc.).
-  const creator = await post<{ data?: { privacy_level_options?: string[] }; error?: { code?: string } }>(
+  // 1. Le linee guida chiedono di leggere prima le opzioni del creator.
+  const creator = await post<{ data?: { privacy_level_options?: string[] }; error?: { code?: string; message?: string } }>(
     '/post/publish/creator_info/query/', accessToken, {},
   );
-  const options = creator.data?.privacy_level_options ?? [];
-  const privacy = options.includes('SELF_ONLY') ? 'SELF_ONLY' : options[0] ?? 'SELF_ONLY';
+  if (creator.error?.code && creator.error.code !== 'ok') {
+    console.error('[tiktok] creator_info:', JSON.stringify(creator.error));
+    throw new AppError(ERR.publishFailed('TikTok', tiktokHint(creator.error.code, creator.error.message)), 502);
+  }
 
-  // 2. Direct Post.
+  // 2. Direct Post, sempre PRIVATO (solo tu): si pubblica subito appena premi Pubblica.
   const direct = await post<TikTokInit>('/post/publish/video/init/', accessToken, {
     post_info: {
       title: caption,
-      privacy_level: privacy, // privato: obbligatorio per app non approvate
+      privacy_level: 'SELF_ONLY',
       disable_comment: false,
       disable_duet: false,
       disable_stitch: false,
     },
     source_info,
   });
-  if (direct.data?.upload_url && direct.data.publish_id) {
-    await upload(direct.data.upload_url, meta.filePath, size);
-    const st = await waitStatus(accessToken, direct.data.publish_id);
-    if (st !== 'PUBLISH_COMPLETE') {
-      throw new AppError(ERR.publishFailed('TikTok', `TikTok sta ancora elaborando il video (stato ${st}). Controlla tra qualche minuto nel profilo.`), 502);
-    }
-    return {
-      url: 'https://www.tiktok.com/',
-      message: 'Pubblicato su TikTok come video privato (visibile solo a te finché l app non è approvata).',
-    };
+  if (!direct.data?.upload_url || !direct.data.publish_id) {
+    console.error('[tiktok] direct post rifiutato:', JSON.stringify(direct.error ?? direct));
+    throw new AppError(ERR.publishFailed('TikTok', tiktokHint(direct.error?.code, direct.error?.message)), 502);
   }
-  console.error('[tiktok] direct post rifiutato:', JSON.stringify(direct.error ?? direct));
-
-  // 3. Ripiego: Upload nella casella di TikTok, da completare nell'app TikTok.
-  const inbox = await post<TikTokInit>('/post/publish/inbox/video/init/', accessToken, { source_info });
-  if (inbox.data?.upload_url && inbox.data.publish_id) {
-    await upload(inbox.data.upload_url, meta.filePath, size);
-    const st = await waitStatus(accessToken, inbox.data.publish_id);
-    if (st !== 'SEND_TO_USER_INBOX' && st !== 'PUBLISH_COMPLETE') {
-      throw new AppError(ERR.publishFailed('TikTok', `TikTok non ha ancora confermato il video (stato ${st}). Riprova tra qualche minuto.`), 502);
-    }
-    return {
-      url: 'https://www.tiktok.com/',
-      message: 'Inviato a TikTok: apri l app TikTok, trovi il video nelle notifiche (Bozze/Inbox) e premi Pubblica. Didascalia da incollare: ' + caption.slice(0, 300),
-    };
+  await upload(direct.data.upload_url, meta.filePath, size);
+  const st = await waitStatus(accessToken, direct.data.publish_id);
+  if (st !== 'PUBLISH_COMPLETE') {
+    throw new AppError(ERR.publishFailed('TikTok', `TikTok sta ancora elaborando il video (stato ${st}). Controlla tra qualche minuto nel tuo profilo.`), 502);
   }
-  console.error('[tiktok] upload inbox rifiutato:', JSON.stringify(inbox.error ?? inbox));
-  const e = direct.error;
-  const hint = e?.code === 'unaudited_client_can_only_post_to_private_accounts'
-    ? 'con un app non ancora approvata l account TikTok deve essere privato'
-    : `${e?.code ?? ''} ${e?.message ?? 'errore init'}`.trim().slice(0, 160);
-  throw new AppError(ERR.publishFailed('TikTok', hint), 502);
+  return {
+    url: 'https://www.tiktok.com/',
+    message: 'Pubblicato su TikTok come video privato: lo trovi nel tuo profilo (visibile solo a te).',
+  };
 };
+
+/** Spiegazione in italiano dei rifiuti più comuni di TikTok. */
+function tiktokHint(code?: string, message?: string): string {
+  switch (code) {
+    case 'unaudited_client_can_only_post_to_private_accounts':
+      return 'metti l account TikTok su privato per pubblicare direttamente (TikTok > Profilo > menu > Impostazioni e privacy > Privacy > Account privato), poi premi Riprova.';
+    case 'scope_not_authorized':
+    case 'access_token_invalid':
+      return 'il collegamento a TikTok non ha i permessi per pubblicare: premi Collega su TikTok e autorizza di nuovo.';
+    case 'spam_risk_too_many_posts':
+    case 'spam_risk_user_banned_from_posting':
+      return 'TikTok ha bloccato temporaneamente le pubblicazioni da questo account: riprova più tardi.';
+    case 'privacy_level_option_mismatch':
+      return 'TikTok non permette video privati su questo account.';
+    case 'rate_limit_exceeded':
+      return 'troppe richieste a TikTok: aspetta un minuto e riprova.';
+    default:
+      return `${code ?? ''} ${message ?? 'errore sconosciuto'}`.trim().slice(0, 160);
+  }
+}

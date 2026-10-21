@@ -186,7 +186,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           })}
         </View>
         <Text style={styles.hint}>
-          Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica in privato finché la tua app non è approvata.
+          Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
         </Text>
 
         {error && (
