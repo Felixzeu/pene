@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as KeepAwake from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import {
@@ -15,6 +15,8 @@ export default function RecordScreen({ project, onClose, onDone }: {
   project: Project; onClose: () => void; onDone: (uri: string) => void;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const { height: screenH } = useWindowDimensions();
   const [facing, setFacing] = useState<'front' | 'back'>('front');
   const [mirror, setMirror] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -54,15 +56,21 @@ export default function RecordScreen({ project, onClose, onDone }: {
     return () => clearInterval(id);
   }, [scrolling, speed, countdown]);
 
-  if (!permission) return <View style={styles.center} />;
-  if (!permission.granted) {
+  if (!permission || !micPermission) return <View style={styles.center} />;
+  if (!permission.granted || !micPermission.granted) {
     return (
       <View style={[styles.center, { paddingHorizontal: 32 }]}>
         <Text style={styles.permTitle}>Serve la fotocamera</Text>
         <Text style={styles.permText}>
           Per registrare con il teleprompter, autorizza fotocamera e microfono.
         </Text>
-        <Pressable style={styles.permBtn} onPress={requestPermission}>
+        <Pressable
+          style={styles.permBtn}
+          onPress={async () => {
+            if (!permission.granted) await requestPermission();
+            if (!micPermission.granted) await requestMicPermission();
+          }}
+        >
           <Text style={{ color: '#fff', fontWeight: '700' }}>Concedi il permesso</Text>
         </Pressable>
         <Pressable onPress={onClose} style={{ marginTop: 18 }}>
@@ -86,10 +94,14 @@ export default function RecordScreen({ project, onClose, onDone }: {
     tick(3);
   };
 
+  // recordAsync si risolve quando la registrazione viene fermata (o raggiunge maxDuration):
+  // è lì che arriva il file da passare alla revisione.
   const startRecording = async () => {
     try {
       setRecording(true);
-      await cameraRef.current?.recordAsync({ maxDuration: 300 });
+      const res = await cameraRef.current?.recordAsync({ maxDuration: 300 });
+      setRecording(false);
+      onRecorded(res);
     } catch {
       setRecording(false);
     }
@@ -113,8 +125,10 @@ export default function RecordScreen({ project, onClose, onDone }: {
         mode="video"
         facing={facing}
         videoQuality="1080p"
-      >
-        <View style={styles.prompterZone} pointerEvents="box-none">
+      />
+
+      {/* Teleprompter sovrapposto: CameraView non mostra i children, quindi sta fuori. */}
+      <View style={styles.prompterZone} pointerEvents="box-none">
           <ScrollView
             ref={scrollRef}
             showsVerticalScrollIndicator={false}
@@ -122,7 +136,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
             scrollEventThrottle={16}
             onContentSizeChange={(_, h) => { maxScroll.current = Math.max(1, h); }}
           >
-            <View style={{ height: '55%' }} />
+            <View style={{ height: screenH * 0.3 }} />
             <Text
               style={[
                 styles.promptText,
@@ -131,10 +145,9 @@ export default function RecordScreen({ project, onClose, onDone }: {
             >
               {script}
             </Text>
-            <View style={{ height: '70%' }} />
+            <View style={{ height: screenH * 0.6 }} />
           </ScrollView>
-        </View>
-      </CameraView>
+      </View>
 
       {/* Barra superiore */}
       <View style={styles.topBar}>
@@ -154,8 +167,9 @@ export default function RecordScreen({ project, onClose, onDone }: {
             <FlipHorizontal2 size={20} color="#fff" />
           </Pressable>
           <Pressable
-            style={styles.circleBtn}
-            onPress={() => { setRecording(false); setFacing((f) => (f === 'front' ? 'back' : 'front')); }}
+            style={[styles.circleBtn, recording && { opacity: 0.4 }]}
+            disabled={recording}
+            onPress={() => setFacing((f) => (f === 'front' ? 'back' : 'front'))}
           >
             <CameraFlip size={20} color="#fff" />
           </Pressable>
