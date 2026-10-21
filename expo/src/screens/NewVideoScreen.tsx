@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Clock, Globe, Lightbulb, MonitorSmartphone, Smile, Sparkles } from 'lucide-react-native';
 import { Btn, ChipRow, Header, Screen } from '../components/ui';
 import ScriptLoading from '../components/ScriptLoading';
@@ -25,6 +25,55 @@ const IDEAS = [
   'Il posto più bello della mia città che nessuno conosce',
   'Come risparmio 200 € al mese senza accorgermene',
 ];
+
+/** Selettore a segmenti: l'evidenziatore rosa scivola e sfuma tra un'opzione e l'altra. */
+function DurationPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [w, setW] = useState(0);
+  const idx = Math.max(0, DURATIONS.findIndex((d) => d.value === value));
+  const pos = useRef(new Animated.Value(idx)).current;
+  const fade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(pos, { toValue: idx, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.sequence([
+        Animated.timing(fade, { toValue: 0.55, duration: 110, useNativeDriver: true }),
+        Animated.timing(fade, { toValue: 1, duration: 170, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, [idx, pos, fade]);
+  const itemW = w > 0 ? (w - 8 - 4 * (DURATIONS.length - 1)) / DURATIONS.length : 0;
+  return (
+    <View style={styles.segment} onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      {itemW > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.segPill, {
+            width: itemW,
+            opacity: fade,
+            transform: [{ translateX: pos.interpolate({ inputRange: [0, DURATIONS.length - 1], outputRange: [0, (itemW + 4) * (DURATIONS.length - 1)] }) }],
+          }]}
+        />
+      )}
+      {DURATIONS.map((d, i) => {
+        // Il testo passa da chiaro a scuro in dissolvenza insieme all'evidenziatore.
+        const dark = pos.interpolate({ inputRange: [i - 1, i, i + 1], outputRange: [0, 1, 0], extrapolate: 'clamp' });
+        const light = pos.interpolate({ inputRange: [i - 1, i, i + 1], outputRange: [1, 0, 1], extrapolate: 'clamp' });
+        return (
+          <Pressable key={d.value} onPress={() => onChange(d.value)} style={styles.segItem}>
+            <Animated.View style={{ alignItems: 'center', opacity: light }}>
+              <Text style={styles.segLabel}>{d.label}</Text>
+              <Text style={styles.segHint}>{d.hint}</Text>
+            </Animated.View>
+            <Animated.View style={[StyleSheet.absoluteFill, styles.segCenter, { opacity: dark }]}>
+              <Text style={[styles.segLabel, { color: colors.onAccent }]}>{d.label}</Text>
+              <Text style={[styles.segHint, { color: colors.onAccent }]}>{d.hint}</Text>
+            </Animated.View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 /** Blocco della pagina: icona + titolo, contenuto sotto. */
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
@@ -121,17 +170,7 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
           {/* Durata */}
           <Section icon={<Clock size={16} color={colors.accent} />} title="Durata">
-            <View style={styles.segment}>
-              {DURATIONS.map((d) => {
-                const on = d.value === duration;
-                return (
-                  <Pressable key={d.value} onPress={() => setDuration(d.value)} style={[styles.segItem, on && styles.segOn]}>
-                    <Text style={[styles.segLabel, on && { color: colors.onAccent }]}>{d.label}</Text>
-                    <Text style={[styles.segHint, on && { color: colors.onAccent }]}>{d.hint}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <DurationPicker value={duration} onChange={setDuration} />
           </Section>
 
           {/* Piattaforma */}
@@ -203,7 +242,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 4, gap: 4,
   },
   segItem: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  segOn: { backgroundColor: colors.accent },
+  segPill: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 12, backgroundColor: colors.accent },
+  segCenter: { alignItems: 'center', justifyContent: 'center' },
   segLabel: { color: colors.text, fontFamily: fonts.display, fontSize: 16 },
   segHint: { color: colors.textDim, fontSize: 11, marginTop: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
