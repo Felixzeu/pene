@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as KeepAwake from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
@@ -14,7 +14,8 @@ import type { Project } from '../types';
 export default function RecordScreen({ project, onClose, onDone }: {
   project: Project; onClose: () => void; onDone: (uri: string) => void;
 }) {
-  const [permission, requestPermission] = useCameraPermissions();
+  // request: true chiede il permesso fotocamera appena si apre la schermata.
+  const [permission, requestPermission] = useCameraPermissions({ request: true });
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const { height: screenH } = useWindowDimensions();
   const [facing, setFacing] = useState<'front' | 'back'>('front');
@@ -33,6 +34,15 @@ export default function RecordScreen({ project, onClose, onDone }: {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const script = project.scriptResult?.script ?? '';
+  // Prima di registrare mostriamo solo la prima frase, ferma, per prepararsi.
+  const firstLine = script.trim().match(/^[^\n.!?]*[.!?]?/)?.[0] ?? '';
+
+  // iOS mostra una richiesta alla volta: il microfono si chiede dopo la fotocamera.
+  useEffect(() => {
+    if (permission?.granted && micPermission && !micPermission.granted && micPermission.canAskAgain) {
+      requestMicPermission();
+    }
+  }, [permission?.granted, micPermission?.status]);
   KeepAwake.useKeepAwake();
 
   useEffect(() => {
@@ -45,33 +55,45 @@ export default function RecordScreen({ project, onClose, onDone }: {
     return () => clearInterval(t);
   }, [recording]);
 
-  // Scroll automatico del teleprompter: un passo ogni frame circa.
+  // Il teleprompter riparte dall'inizio a ogni registrazione.
   useEffect(() => {
-    if (!scrolling || countdown > 0) return;
+    if (!recording) return;
+    scrollY.current = 0;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [recording]);
+
+  // Scroll automatico del teleprompter, solo durante la registrazione: un passo ogni frame circa.
+  useEffect(() => {
+    if (!recording || !scrolling) return;
     const id = setInterval(() => {
       scrollY.current += speed * 0.55;
       if (scrollY.current > maxScroll.current) scrollY.current = 0;
       scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
     }, 33);
     return () => clearInterval(id);
-  }, [scrolling, speed, countdown]);
+  }, [recording, scrolling, speed]);
 
   if (!permission || !micPermission) return <View style={styles.center} />;
   if (!permission.granted || !micPermission.granted) {
+    // Se l'utente ha già negato, iOS non mostra più la richiesta: serve aprire Impostazioni.
+    const blocked = (!permission.granted && !permission.canAskAgain) || (!micPermission.granted && !micPermission.canAskAgain);
     return (
       <View style={[styles.center, { paddingHorizontal: 32 }]}>
-        <Text style={styles.permTitle}>Serve la fotocamera</Text>
+        <Text style={styles.permTitle}>Servono fotocamera e microfono</Text>
         <Text style={styles.permText}>
-          Per registrare con il teleprompter, autorizza fotocamera e microfono.
+          {blocked
+            ? `Hai negato ${!micPermission.granted ? 'il microfono' : 'la fotocamera'}: attivalo in Impostazioni › Expo Go, poi torna qui.`
+            : 'Per registrare con il teleprompter, autorizza fotocamera e microfono.'}
         </Text>
         <Pressable
           style={styles.permBtn}
           onPress={async () => {
+            if (blocked) { Linking.openSettings(); return; }
             if (!permission.granted) await requestPermission();
             if (!micPermission.granted) await requestMicPermission();
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Concedi il permesso</Text>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>{blocked ? 'Apri Impostazioni' : 'Concedi il permesso'}</Text>
         </Pressable>
         <Pressable onPress={onClose} style={{ marginTop: 18 }}>
           <Text style={{ color: colors.textDim }}>Torna indietro</Text>
@@ -125,6 +147,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
         mode="video"
         facing={facing}
         videoQuality="1080p"
+        mute={false}
       />
 
       {/* Teleprompter sovrapposto: CameraView non mostra i children, quindi sta fuori. */}
@@ -132,6 +155,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
           <ScrollView
             ref={scrollRef}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={recording}
             onScroll={(e) => { if (!recording) scrollY.current = e.nativeEvent.contentOffset.y; }}
             scrollEventThrottle={16}
             onContentSizeChange={(_, h) => { maxScroll.current = Math.max(1, h); }}
@@ -143,7 +167,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
                 { fontSize, transform: mirror ? [{ scaleX: -1 }] : [] },
               ]}
             >
-              {script}
+              {recording ? script : firstLine}
             </Text>
             <View style={{ height: screenH * 0.6 }} />
           </ScrollView>
