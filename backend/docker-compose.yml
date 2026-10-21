@@ -1,0 +1,11 @@
+services:
+  backend:
+    build: .
+    ports: ["3000:3000"]
+    env_file: .env
+    environment:
+      - PUBLIC_URL=${PUBLIC_URL}
+    volumes:
+      - ./data:/app/data
+      - ./public/videos:/app/public/videos
+    restart: unless-stopped
