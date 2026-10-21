@@ -118,7 +118,7 @@ export async function exchangeCode(provider: Provider, code: string): Promise<vo
     return;
   }
 
-  // TikTok con PKCE
+  // TikTok (app Web: client_secret, niente PKCE)
   const r = await fetch(`${'https://open.tiktokapis.com/v2'}/oauth/token/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -130,12 +130,21 @@ export async function exchangeCode(provider: Provider, code: string): Promise<vo
       grant_type: 'authorization_code',
     }),
   });
-  const d = (await r.json()) as { data?: { access_token?: string; refresh_token?: string } };
-  if (!d.data?.access_token) throw new AppError('Autorizzazione TikTok non riuscita.', 400);
-  await saveToken('tiktok', d.data.access_token, d.data.refresh_token);
+  // L'API v2 risponde con i campi al primo livello: {access_token, refresh_token, open_id, ...};
+  // in caso di errore: {error, error_description, log_id}.
+  const d = (await r.json().catch(() => ({}))) as {
+    access_token?: string; refresh_token?: string; error?: string; error_description?: string;
+    data?: { access_token?: string; refresh_token?: string };
+  };
+  const access = d.access_token ?? d.data?.access_token;
+  if (!access) {
+    console.error('[auth] TikTok token:', r.status, JSON.stringify(d));
+    throw new AppError(`Autorizzazione TikTok non riuscita: ${d.error_description ?? d.error ?? `errore ${r.status}`}`, 400);
+  }
+  await saveToken('tiktok', access, d.refresh_token ?? d.data?.refresh_token);
 }
 
-// I callback usano lo state per recuperare il verifier PKCE e completare lo scambio.
+// I callback verificano lo state (anti-CSRF) e completano lo scambio del codice.
 authRouter.get('/:provider/callback', async (req, res, next) => {
   try {
     const provider = req.params.provider as Provider;
@@ -145,30 +154,12 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
     if (!sess || sess.provider !== provider) throw new AppError('Sessione di autorizzazione scaduta: riprova.', 400);
     pending.delete(state);
 
-    if (provider === 'tiktok' && sess.verifier) {
-      // Scambio TikTok con verifier PKCE corretto.
-      const o = config.oauth;
-      const r = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          code,
-          client_key: o.tiktok.clientKey,
-          client_secret: o.tiktok.clientSecret,
-          redirect_uri: o.tiktok.redirect,
-          grant_type: 'authorization_code',
-          code_verifier: sess.verifier,
-        }),
-      });
-      const d = (await r.json()) as { data?: { access_token?: string; refresh_token?: string } };
-      if (!d.data?.access_token) throw new AppError('Autorizzazione TikTok non riuscita.', 400);
-      await saveToken('tiktok', d.data.access_token, d.data.refresh_token);
-    } else {
-      await exchangeCode(provider, code);
-    }
+    await exchangeCode(provider, code);
 
     res.send(page('Account collegato! Puoi tornare nell app.'));
   } catch (e) {
+    // Si apre nel browser: meglio una pagina leggibile che JSON.
+    if (e instanceof AppError) { res.status(e.status).send(page(e.message)); return; }
     next(e);
   }
 });
