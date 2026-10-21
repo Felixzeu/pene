@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { config } from '../config';
-import { saveToken } from '../lib/tokens';
+import { isLinked, saveToken } from '../lib/tokens';
 import { AppError, ERR } from '../lib/errors';
 
 // OAuth2 per i social. L'app apre la pagina di consenso nel browser;
@@ -21,6 +21,13 @@ export const authRouter = Router();
 
 const page = (msg: string) =>
   `<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:sans-serif;background:#0B0A0E;color:#F5F3EE;display:grid;place-items:center;height:100vh;margin:0;padding:24px;text-align:center"><h2>${msg}</h2></body></html>`;
+
+// GET /api/auth/status — quali social sono già collegati (anche se collegati da un altro dispositivo).
+authRouter.get('/status', async (_req, res) => {
+  const providers: Provider[] = ['youtube', 'instagram', 'facebook', 'tiktok'];
+  const entries = await Promise.all(providers.map(async (p) => [p, await isLinked(p)] as const));
+  res.json(Object.fromEntries(entries));
+});
 
 authRouter.get('/:provider', (req, res) => {
   const provider = req.params.provider as Provider;

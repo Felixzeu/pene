@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
-import { authUrl, mediaUrl, publishVideo } from '../services/api';
+import { authUrl, linkedProviders, mediaUrl, publishVideo } from '../services/api';
 import { saveVideoToPhotos } from '../services/download';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome } from '../types';
@@ -31,6 +31,16 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const outcomes = project.published ?? [];
+
+  // Social già collegati sul backend (anche se collegati dal PC): si aggiorna
+  // quando l'app torna in primo piano dopo il login nel browser.
+  const [linked, setLinked] = useState<Partial<Record<ProviderId, boolean>>>({});
+  const refreshLinked = useCallback(() => { linkedProviders().then(setLinked).catch(() => {}); }, []);
+  useEffect(() => {
+    refreshLinked();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refreshLinked(); });
+    return () => sub.remove();
+  }, [refreshLinked]);
 
   const videoUrl = mediaUrl(project.finalVideoUrl);
   const player = useVideoPlayer(videoUrl ? { uri: videoUrl } : null, (p) => { p.loop = true; });
@@ -152,6 +162,10 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                     <RotateCcw size={15} color={colors.warm} />
                     <Text style={styles.retry}>Riprova</Text>
                   </Pressable>
+                ) : linked[p.id] ? (
+                  <Pressable onPress={() => Linking.openURL(authUrl(p.id))} hitSlop={8} style={styles.inline}>
+                    <Badge text="collegato" tone="ok" />
+                  </Pressable>
                 ) : (
                   <Pressable onPress={() => Linking.openURL(authUrl(p.id))} hitSlop={8} style={styles.inline}>
                     <Link2 size={15} color={colors.textDim} />
@@ -163,7 +177,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           })}
         </View>
         <Text style={styles.hint}>
-          Prima volta? Tocca "Collega", autorizza nel browser e torna qui. TikTok pubblica in privato finché la tua app non è approvata.
+          Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica in privato finché la tua app non è approvata.
         </Text>
 
         {error && (

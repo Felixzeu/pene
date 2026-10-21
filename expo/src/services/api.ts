@@ -150,5 +150,9 @@ export const publishVideo = (body: PublishRequest) =>
     body: JSON.stringify(body),
   }, 300000);
 
+/** Quali social sono già collegati sul backend. */
+export const linkedProviders = () =>
+  request<Record<ProviderId, boolean>>('/api/auth/status', {}, 15000);
+
 /** URL da aprire nel browser per collegare un social (OAuth2). */
 export const authUrl = (provider: ProviderId) => `${API_URL}/api/auth/${provider}`;
