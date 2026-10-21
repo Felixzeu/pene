@@ -1,5 +1,6 @@
 import { listPages, NO_PAGE_HINT } from '../publishers/metaPages';
 import { Router } from 'express';
+import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { config } from '../config';
 import { isLinked, loadToken, removeToken, saveToken } from '../lib/tokens';
@@ -35,6 +36,27 @@ authRouter.post('/ticket', requireUser, (req, res) => {
   const ticket = randomBytes(18).toString('base64url');
   tickets.set(ticket, { user: currentUser(), createdAt: Date.now(), ttl: req.body?.computer ? 600000 : 120000 });
   res.json({ ticket });
+});
+
+// POST /api/auth/youtube/google — YouTube collegato con il login Google dell'app (Supabase):
+// l'app manda i token di Google, qui controlliamo che siano del nostro client e con il permesso giusto.
+authRouter.post('/youtube/google', requireUser, async (req, res, next) => {
+  try {
+    const body = z.object({ accessToken: z.string().min(10).max(4096), refreshToken: z.string().max(4096).optional() }).parse(req.body);
+    const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(body.accessToken)}`);
+    const info = (await r.json().catch(() => ({}))) as { aud?: string; scope?: string; error_description?: string };
+    if (!r.ok) throw new AppError('Token Google non valido: riprova.', 400);
+    if (!info.scope?.includes('youtube.upload')) throw new AppError('Manca il permesso di caricare video su YouTube: riprova e accetta tutte le voci.', 400);
+    if (body.refreshToken && info.aud !== config.oauth.youtube.clientId) {
+      // Il rinnovo del token funziona solo con lo stesso client Google configurato su Supabase.
+      console.error(`[auth] YouTube via Google: client ${info.aud} diverso da YOUTUBE_CLIENT_ID`);
+      throw new AppError('Configurazione: YOUTUBE_CLIENT_ID e YOUTUBE_CLIENT_SECRET nel backend devono essere quelli del login Google su Supabase.', 500);
+    }
+    await saveToken('youtube', body.accessToken, body.refreshToken);
+    res.json({ ok: true, message: 'YouTube collegato con il tuo account Google.' });
+  } catch (e) {
+    next(e);
+  }
 });
 
 authRouter.get('/status', requireUser, async (_req, res) => {

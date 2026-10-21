@@ -191,6 +191,14 @@ export async function authUrl(provider: ProviderId, returnTo?: string): Promise<
   return `${base}&ticket=${encodeURIComponent(ticket)}`;
 }
 
+/** Salva sul backend i token YouTube ottenuti con il login Google. */
+export const saveGoogleYouTube = (t: { accessToken: string; refreshToken?: string }) =>
+  request<{ ok: boolean; message: string }>('/api/auth/youtube/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(t),
+  }, 20000);
+
 export const getAccount = () => request<{ id: string; email: string | null; admin: boolean }>('/api/account', {}, 15000);
 
 export interface Wallet {

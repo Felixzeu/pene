@@ -102,6 +102,47 @@ export async function signInWith(provider: 'google' | 'apple') {
   if (e2) throw new Error(it(e2.message));
 }
 
+/** True se l'account è entrato (anche) con Google. */
+export async function hasGoogle(): Promise<boolean> {
+  const s = await getSession();
+  const providers = (s?.user.app_metadata?.providers as string[] | undefined) ?? [s?.user.app_metadata?.provider];
+  return providers.includes('google');
+}
+
+/**
+ * YouTube con lo stesso account Google del login: rifà l'accesso Google chiedendo anche
+ * il permesso di caricare video, e restituisce i token di Google da dare al backend.
+ * Restituisce null se l'utente chiude la finestra.
+ */
+export async function googleYouTubeTokens(): Promise<{ accessToken: string; refreshToken?: string } | null> {
+  const sb = need();
+  const before = (await getSession())?.user.id;
+  const redirectTo = ExpoLinking.createURL('login');
+  const { data, error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+      scopes: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl',
+      queryParams: { access_type: 'offline', prompt: 'consent' }, // serve per avere il refresh token
+    },
+  });
+  if (error || !data?.url) throw new Error(it(error?.message ?? 'Accesso Google non disponibile.'));
+  const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (res.type !== 'success') return null;
+  const q = ExpoLinking.parse(res.url).queryParams ?? {};
+  if (q.error_description || q.error) throw new Error(it(String(q.error_description ?? q.error)));
+  if (typeof q.code !== 'string') throw new Error('Accesso non completato: riprova.');
+  const { data: d2, error: e2 } = await sb.auth.exchangeCodeForSession(q.code);
+  if (e2) throw new Error(it(e2.message));
+  if (before && d2.session?.user.id !== before) {
+    throw new Error('Hai scelto un account Google diverso da quello con cui sei entrato: ora sei dentro con quello. Riprova scegliendo l\'account giusto.');
+  }
+  const accessToken = d2.session?.provider_token;
+  if (!accessToken) throw new Error('Google non ha dato il permesso per YouTube: riprova e accetta tutte le voci.');
+  return { accessToken, refreshToken: d2.session?.provider_refresh_token ?? undefined };
+}
+
 /** Quali accessi social sono attivi su Supabase (per mostrare solo i pulsanti che funzionano). */
 export async function enabledProviders(): Promise<{ google: boolean; apple: boolean }> {
   try {
