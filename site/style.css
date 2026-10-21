@@ -1,0 +1,15 @@
+:root{--bg:#07060D;--surface:#110F1D;--border:#2A2540;--text:#F4F1FF;--dim:#A59DC4;--accent:#FF5CC8;--accent2:#A15CFF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 'Space Grotesk',system-ui,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:760px;margin:0 auto;padding:40px 20px 80px}
+.logo{font-weight:700;font-size:28px;letter-spacing:-1px;color:var(--accent);text-decoration:none}
+.logo span{color:var(--accent2)}
+nav{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+nav .links a{color:var(--dim);text-decoration:none;margin-left:16px;font-size:14px}
+h1{font-size:clamp(34px,7vw,56px);line-height:1.05;letter-spacing:-2px;margin:56px 0 16px}
+h2{font-size:22px;margin:36px 0 8px}
+p,li{color:var(--dim)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px;margin:16px 0}
+.grad{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--dim)}
