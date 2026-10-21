@@ -24,6 +24,14 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 60000): 
   }
 }
 
+/** Modifica lo script esistente con un'istruzione (es. "più corto"). */
+export const rewriteScript = (body: ScriptParams & { script: string; title: string; instruction: string }) =>
+  request<ScriptResult>('/api/script/rewrite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, 120000);
+
 /** Genera lo script con retry automatico su errori 429 (quota) e 5xx. */
 export async function generateScript(params: ScriptParams): Promise<ScriptResult> {
   let lastErr: unknown;

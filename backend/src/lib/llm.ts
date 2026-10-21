@@ -53,6 +53,23 @@ export async function generateScript(p: {
   return parseOutput(await llmJson(SYSTEM, buildPrompt(p), 0.9));
 }
 
+/** Riscrive uno script esistente seguendo un'istruzione (più corto, hook più forte, ...). */
+export async function rewriteScript(p: {
+  script: string; title: string; instruction: string; tone: string; duration: number; platform: string; language: string;
+}): Promise<ScriptOutput> {
+  const user = `Script attuale:
+"""${p.script}"""
+Titolo attuale: ${p.title}
+Tono: ${p.tone}
+Piattaforma: ${p.platform}
+Durata target: ${p.duration} secondi
+Lingua di output: ${p.language}
+
+Modifica richiesta: ${p.instruction}
+Riscrivi lo script applicando SOLO questa modifica e mantenendo il resto il più possibile uguale. Aggiorna titolo e hashtag solo se serve.`;
+  return parseOutput(await llmJson(SYSTEM, user, 0.7));
+}
+
 /** Chiamata al provider scelto (Gemini o Ollama) che deve rispondere in JSON. */
 function llmJson(system: string, user: string, temperature: number): Promise<string> {
   return config.llmProvider === 'ollama'
