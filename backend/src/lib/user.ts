@@ -57,6 +57,17 @@ export async function isAdminRequest(req: express.Request): Promise<boolean> {
   try { return Boolean((await verifyToken(h.slice(7).trim())).admin); } catch { return false; }
 }
 
+/**
+ * Avvolge un middleware basato su eventi (es. multer): il suo callback arriva dagli eventi
+ * dello stream della richiesta e perde l'utente di AsyncLocalStorage. Qui lo rimettiamo.
+ */
+export function keepUser(mw: express.RequestHandler): express.RequestHandler {
+  return (req, res, next) => {
+    const user = currentUser();
+    mw(req, res, (err?: unknown) => runAs(user, () => next(err)));
+  };
+}
+
 /** Middleware: senza login valido risponde 401 (solo se gli account sono attivi). */
 export const requireUser: express.RequestHandler = (req, _res, next) => {
   if (!accountsEnabled()) { runAs(LOCAL, next); return; }

@@ -10,14 +10,14 @@ import { generateEditSpec } from '../lib/llm';
 import { AppError, ERR } from '../lib/errors';
 import { fetchWebImage } from '../lib/webmedia';
 import { prepareImage } from '../lib/cutout';
-import { currentUser } from '../lib/user';
+import { currentUser, keepUser } from '../lib/user';
 import { charge, withCoins } from '../lib/coins';
 
 // 200 MB per tutti, 2 GB per gli amministratori.
 const uploader = (field: string) => {
   const normal = multer({ dest: paths.tmp, limits: { fileSize: 200 * 1024 * 1024 } }).single(field) as unknown as express.RequestHandler;
   const admin = multer({ dest: paths.tmp, limits: { fileSize: 2048 * 1024 * 1024 } }).single(field) as unknown as express.RequestHandler;
-  return ((req, res, next) => (currentUser().admin ? admin : normal)(req, res, next)) as express.RequestHandler;
+  return keepUser((req, res, next) => (currentUser().admin ? admin : normal)(req, res, next));
 };
 
 const metaSchema = z.object({
