@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Sparkles } from 'lucide-react-native';
 import { Btn, ChipRow, Field, Header, Screen, TextArea } from '../components/ui';
+import ScriptLoading from '../components/ScriptLoading';
 import { colors } from '../theme';
 import { generateScript } from '../services/api';
 import type { Project, ScriptResult, TargetDuration } from '../types';
@@ -53,6 +54,8 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
       setLoading(false);
     }
   };
+
+  if (loading) return <ScriptLoading />;
 
   return (
     <Screen>

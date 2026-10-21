@@ -18,5 +18,7 @@ export const ERR = {
   noFile: 'Nessun video ricevuto: riprova la registrazione.',
   badProvider: 'Social non supportato.',
   notLinked: 'Account non collegato: tocca "Collega" e completa l autorizzazione nel browser.',
+  scriptRefused: 'L IA non può scrivere uno script su questo argomento: prova a riformularlo o scegline un altro.',
+  scriptInvalid: 'L IA non è riuscita a generare lo script: riprova o cambia argomento.',
   publishFailed: (p: string, m: string) => `Pubblicazione su ${p} non riuscita: ${m}`,
 };

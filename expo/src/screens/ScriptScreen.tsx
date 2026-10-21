@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Mic, RefreshCw } from 'lucide-react-native';
 import { Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
+import ScriptLoading from '../components/ScriptLoading';
 import { colors, radius } from '../theme';
 import { generateScript } from '../services/api';
 import { upsertProject } from '../services/history';
@@ -18,6 +19,7 @@ export default function ScriptScreen({ project, onBack, onRecord, update }: {
   const sr = draft.scriptResult;
 
   if (!sr) return null;
+  if (regenerating) return <ScriptLoading />;
 
   const mutate = (p: Partial<Project>) => {
     const next = { ...draft, ...p };

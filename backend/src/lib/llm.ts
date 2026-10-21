@@ -16,7 +16,8 @@ Regole:
 - Frasi brevi, max 12 parole, facili da leggere ad alta voce.
 - Struttura: hook, corpo (2-4 punti concreti), call to action finale.
 - Durata target indicata in secondi: circa 150 parole al minuto.
-- Il titolo è max 70 caratteri, senza hashtag. Gli hashtag sono 5-8, senza "#" e senza spazi.`;
+- Il titolo è max 70 caratteri, senza hashtag. Gli hashtag sono 5-8, senza "#" e senza spazi.
+- Se non puoi scrivere lo script per l'argomento richiesto, rispondi SOLO con {"error": "motivo breve"}.`;
 
 function buildPrompt(p: { topic: string; tone: string; duration: number; platform: string; language: string }) {
   return `Argomento: ${p.topic}
@@ -71,8 +72,14 @@ async function geminiCall(p: { topic: string; tone: string; duration: number; pl
   if (!res.ok) throw new AppError(`Gemini ha risposto con errore ${res.status}.`, 502);
 
   const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    promptFeedback?: { blockReason?: string };
+    candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[];
   };
+  // Argomento bloccato dai filtri di sicurezza di Gemini.
+  const finish = data.candidates?.[0]?.finishReason;
+  if (data.promptFeedback?.blockReason || finish === 'SAFETY' || finish === 'PROHIBITED_CONTENT') {
+    throw new AppError(ERR.scriptRefused, 422);
+  }
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new AppError('Gemini non ha prodotto uno script: riprova.', 502);
   return text;
@@ -103,20 +110,26 @@ async function ollamaChat(p: { topic: string; tone: string; duration: number; pl
   }
 }
 
+// Frasi tipiche con cui un modello rifiuta invece di scrivere lo script.
+const REFUSAL = /^(mi dispiace|non posso|non sono in grado|purtroppo non|i('| a)m sorry|sorry|i can(no|')t|i am unable|lo siento|no puedo|désolé|je ne peux)/i;
+
 function parseOutput(raw: string): ScriptOutput {
   let text = raw.trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/); // alcuni modelli aggiungono il code fence
   if (fence) text = fence[1] as string;
+  let obj: { script?: string; title?: string; hashtags?: unknown; error?: string };
   try {
-    const obj = JSON.parse(text) as { script?: string; title?: string; hashtags?: unknown };
-    if (!obj.script || !obj.title) throw new Error('missing fields');
-    return {
-      script: obj.script,
-      title: obj.title,
-      hashtags: Array.isArray(obj.hashtags) ? obj.hashtags.map(String).map((h) => h.replace(/^#/, '')) : [],
-    };
+    obj = JSON.parse(text);
   } catch {
-    // Fallback: usa il testo così com'è come script.
-    return { script: text, title: 'Il mio video', hashtags: [] };
+    // Niente JSON: di solito è un rifiuto o una risposta fuori formato, non uno script.
+    throw new AppError(REFUSAL.test(text) ? ERR.scriptRefused : ERR.scriptInvalid, 422);
   }
+  if (obj.error) throw new AppError(ERR.scriptRefused, 422);
+  if (!obj.script?.trim() || !obj.title) throw new AppError(ERR.scriptInvalid, 422);
+  if (REFUSAL.test(obj.script.trim())) throw new AppError(ERR.scriptRefused, 422);
+  return {
+    script: obj.script,
+    title: obj.title,
+    hashtags: Array.isArray(obj.hashtags) ? obj.hashtags.map(String).map((h) => h.replace(/^#/, '')) : [],
+  };
 }

@@ -31,16 +31,19 @@ export function transcribe(audioPath: string, language: string): Promise<Transcr
       }
       try {
         // Lettura da disco (non require: il percorso è relativo e require lo cercherebbe in node_modules).
+        // whisper-cli -oj scrive "transcription" come array di segmenti.
+        type RawSegment = { text: string; offsets?: { from: number; to: number } };
         const json = JSON.parse(readFileSync(`${outBase}.json`, 'utf8')) as {
-          transcription?: { segments?: { text: string; offsets?: { from: number; to: number }; timestamps?: { from: string; to: string } }[] };
+          transcription?: RawSegment[] | { segments?: RawSegment[] };
         };
-        const segs = json.transcription?.segments ?? [];
+        const segs = Array.isArray(json.transcription) ? json.transcription : json.transcription?.segments ?? [];
         const segments: Segment[] = [];
         const words: Word[] = [];
         for (const s of segs) {
           const start = (s.offsets?.from ?? 0) / 1000;
           const end = (s.offsets?.to ?? 0) / 1000;
-          const text = (s.text ?? '').trim();
+          // Scarta i marcatori non parlati di whisper: [BLANK_AUDIO], [_BEG_], (musica)…
+          const text = (s.text ?? '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim();
           if (!text) continue;
           segments.push({ text, start, end });
           // Ripartisce le parole sul segmento in modo proporzionale alla lunghezza.
