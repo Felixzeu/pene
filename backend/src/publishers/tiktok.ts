@@ -91,9 +91,9 @@ export const tiktokPublish = async (meta: PublishMeta): Promise<PublishResult> =
     post_info: {
       title: caption,
       privacy_level: 'SELF_ONLY',
-      disable_comment: false,
-      disable_duet: false,
-      disable_stitch: false,
+      disable_comment: meta.settings.tiktok?.disableComment ?? false,
+      disable_duet: meta.settings.tiktok?.disableDuet ?? false,
+      disable_stitch: meta.settings.tiktok?.disableStitch ?? false,
     },
     source_info,
   });

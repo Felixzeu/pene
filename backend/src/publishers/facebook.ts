@@ -49,7 +49,7 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
   // 3. Pubblica il Reel.
   const publish = await fetch(
     `${GRAPH}/${page.id}/video_reels?upload_phase=FINISH&video_id=${startData.video_id}` +
-    `&video_state=PUBLISHED&description=${encodeURIComponent(caption)}&access_token=${page.access_token}`,
+    `&video_state=${meta.settings.facebook?.state ?? 'PUBLISHED'}&description=${encodeURIComponent(caption)}&access_token=${page.access_token}`,
     { method: 'POST' },
   );
   const publishData = (await publish.json()) as { success?: boolean; error?: { message?: string } };
@@ -57,5 +57,7 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
     console.error('[Facebook] pubblicazione rifiutata:', JSON.stringify(publishData));
     throw new AppError(ERR.publishFailed('Facebook', publishData.error?.message?.slice(0, 160) ?? 'errore pubblicazione'), 502);
   }
-  return { url: `https://www.facebook.com/reel/${startData.video_id}`, message: 'Pubblicato sulla Pagina Facebook (può volerci qualche minuto per vederlo).' };
+  return meta.settings.facebook?.state === 'DRAFT'
+    ? { url: 'https://business.facebook.com/latest/content_calendar', message: 'Salvato come bozza nella Pagina: lo pubblichi da Meta Business Suite.' }
+    : { url: `https://www.facebook.com/reel/${startData.video_id}`, message: 'Pubblicato sulla Pagina Facebook (può volerci qualche minuto per vederlo).' };
 };

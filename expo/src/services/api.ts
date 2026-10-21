@@ -1,5 +1,5 @@
 import { API_URL, type ProviderId } from '../config';
-import type { EditSpec, Job, MediaItem, Project, PublishOutcome, ScriptParams, ScriptResult } from '../types';
+import type { EditSpec, Job, MediaItem, Project, PublishOutcome, PublishSettings, ScriptParams, ScriptResult } from '../types';
 
 // Client API verso il backend. Tutti gli errori arrivano già in italiano dal server;
 // qui li normalizziamo e gestiamo retry/timeout dei casi di rete.
@@ -149,6 +149,7 @@ export interface PublishRequest {
   title: string;
   description: string;
   hashtags: string[];
+  settings?: PublishSettings;
 }
 
 export const publishVideo = (body: PublishRequest) =>

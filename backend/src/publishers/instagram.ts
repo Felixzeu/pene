@@ -39,7 +39,7 @@ export const instagramPublish = async (meta: PublishMeta): Promise<PublishResult
     media_type: 'REELS',
     video_url: meta.videoUrl,
     caption,
-    share_to_feed: 'true',
+    share_to_feed: String(meta.settings.instagram?.shareToFeed ?? true),
   }));
   const cData = (await container.json()) as { id?: string; error?: { message?: string } };
   if (!cData.id) {

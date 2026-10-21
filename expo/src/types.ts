@@ -107,3 +107,11 @@ export interface Project {
 }
 
 export interface HistoryEntry extends Project {}
+
+/** Impostazioni di pubblicazione per social, ricordate tra un video e l'altro. */
+export interface PublishSettings {
+  youtube: { privacy: 'public' | 'unlisted' | 'private'; madeForKids: boolean; notifySubscribers: boolean; category: string };
+  instagram: { shareToFeed: boolean };
+  facebook: { state: 'PUBLISHED' | 'DRAFT' };
+  tiktok: { disableComment: boolean; disableDuet: boolean; disableStitch: boolean };
+}

@@ -8,6 +8,9 @@ import type { PublishMeta, PublishResult } from './index';
 
 export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> => {
   const accessToken = await freshAccessToken('youtube');
+  const yt = meta.settings.youtube ?? {};
+  // I progetti Google non verificati possono caricare solo video privati: di default privato.
+  const privacy = yt.privacy ?? (process.env.YOUTUBE_PRIVACY as 'public' | 'unlisted' | 'private' | undefined) ?? 'private';
 
   // 0. L'account scelto al login deve avere un canale YouTube (senza canale Google risponde 404/401).
   const ch = await fetch('https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true', {
@@ -21,7 +24,7 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
 
   // 1. Apri una sessione di upload "resumable".
   const init = await fetch(
-    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+    `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=${yt.notifySubscribers ?? true}`,
     {
       method: 'POST',
       headers: {
@@ -33,10 +36,9 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
         snippet: {
           title: `${meta.title.slice(0, 93)} #viral`, // #viral sempre, anche nel titolo
           description: [meta.description, `${hashtagLine(meta.hashtags)} #shorts`].filter(Boolean).join('\n\n'),
-          categoryId: '22',
+          categoryId: yt.category ?? '22',
         },
-        // I progetti Google non verificati possono caricare solo video privati: default privato.
-        status: { privacyStatus: process.env.YOUTUBE_PRIVACY ?? 'private', selfDeclaredMadeForKids: false },
+        status: { privacyStatus: privacy, selfDeclaredMadeForKids: yt.madeForKids ?? false },
       }),
     },
   );
@@ -70,7 +72,8 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
   const videoId = data.id;
   return {
     url: videoId ? `https://youtube.com/shorts/${videoId}` : undefined,
-    message: (process.env.YOUTUBE_PRIVACY ?? 'private') === 'private' ? 'Caricato su YouTube come privato: rendilo pubblico da YouTube Studio.' : 'Pubblicato su YouTube',
+    message: privacy === 'private' ? 'Caricato su YouTube come privato: rendilo pubblico da YouTube Studio.'
+      : privacy === 'unlisted' ? 'Caricato su YouTube come non in elenco (solo chi ha il link).' : 'Pubblicato su YouTube',
   };
 };
 

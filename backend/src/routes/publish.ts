@@ -12,6 +12,21 @@ const schema = z.object({
   title: z.string().min(1).max(100),
   description: z.string().max(2200).default(''),
   hashtags: z.array(z.string().max(40)).max(15).default([]),
+  settings: z.object({
+    youtube: z.object({
+      privacy: z.enum(['public', 'unlisted', 'private']).optional(),
+      madeForKids: z.boolean().optional(),
+      notifySubscribers: z.boolean().optional(),
+      category: z.string().regex(/^\d{1,3}$/).optional(),
+    }).optional(),
+    instagram: z.object({ shareToFeed: z.boolean().optional() }).optional(),
+    facebook: z.object({ state: z.enum(['PUBLISHED', 'DRAFT']).optional() }).optional(),
+    tiktok: z.object({
+      disableComment: z.boolean().optional(),
+      disableDuet: z.boolean().optional(),
+      disableStitch: z.boolean().optional(),
+    }).optional(),
+  }).default({}),
 });
 
 export const publishRouter = Router();
@@ -40,6 +55,7 @@ publishRouter.post('/', async (req, res, next) => {
             videoUrl,
             filePath: job.finalPath as string,
             language: job.language,
+            settings: body.settings,
           });
           return { provider, status: 'published' as const, url: out.url, message: out.message };
         } catch (e) {

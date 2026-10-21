@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
+import PublishSettingsPanel from '../components/PublishSettingsPanel';
+import { DEFAULT_SETTINGS, loadPublishSettings, savePublishSettings } from '../services/publishSettings';
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
 import { authUrl, linkedProviders, mediaUrl, publishVideo } from '../services/api';
 import { saveVideoToPhotos } from '../services/download';
 import { upsertProject } from '../services/history';
-import type { Project, PublishOutcome } from '../types';
+import type { Project, PublishOutcome, PublishSettings } from '../types';
 
 // Pubblicazione sui social: ogni social è indipendente. Si collega l'account
 // una volta (OAuth nel browser), si scelgono i social e si pubblica; se uno
@@ -29,6 +31,10 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const outcomes = project.published ?? [];
+  const [settings, setSettings] = useState<PublishSettings>(DEFAULT_SETTINGS);
+  const [open, setOpen] = useState<ProviderId | null>(null);
+  useEffect(() => { loadPublishSettings().then(setSettings); }, []);
+  const changeSettings = (s: PublishSettings) => { setSettings(s); savePublishSettings(s); };
 
   // Social già collegati sul backend (anche se collegati dal PC): si aggiorna
   // quando l'app torna in primo piano dopo il login nel browser.
@@ -59,6 +65,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         title: title.trim().slice(0, 100),
         description: description.trim(),
         hashtags: ['viral', ...cleanTags(hashtags)].slice(0, 15),
+        settings,
       });
       // Unisce i nuovi esiti a quelli precedenti (un "Riprova" sostituisce solo il suo social).
       const merged: PublishOutcome[] = [
@@ -147,7 +154,8 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
             const on = selected.includes(p.id);
             const isBusy = busy.includes(p.id);
             return (
-              <View key={p.id} style={[styles.row, i === PROVIDERS.length - 1 && { borderBottomWidth: 0 }]}>
+              <View key={p.id} style={i < PROVIDERS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View style={styles.row}>
                 <Pressable onPress={() => toggle(p.id)} hitSlop={8} style={styles.rowMain}>
                   <View style={[styles.check, on && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
                     {on && <CheckCircle2 size={14} color="#fff" />}
@@ -181,12 +189,17 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                     <Text style={styles.link}>Collega</Text>
                   </Pressable>
                 )}
+                <Pressable onPress={() => setOpen(open === p.id ? null : p.id)} hitSlop={10} accessibilityLabel={`Impostazioni ${p.label}`}>
+                  {open === p.id ? <ChevronUp size={18} color={colors.textDim} /> : <ChevronDown size={18} color={colors.textDim} />}
+                </Pressable>
+              </View>
+              {open === p.id && <PublishSettingsPanel provider={p.id} settings={settings} onChange={changeSettings} />}
               </View>
             );
           })}
         </View>
         <Text style={styles.hint}>
-          Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
+          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Prima volta? Tocca "Collega", autorizza nel browser e torna qui. Se il login non si apre sul telefono (succede con TikTok), collega dal PC aprendo http://localhost:3000/api/auth/tiktok. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
         </Text>
 
         {error && (
@@ -241,10 +254,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
     borderRadius: radius.lg, paddingHorizontal: 16,
   },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   check: {
     width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border,
