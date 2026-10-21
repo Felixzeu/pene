@@ -28,13 +28,13 @@ export const config = {
       clientId: process.env.META_APP_ID ?? '',
       clientSecret: process.env.META_APP_SECRET ?? '',
       redirect: `${PUBLIC_URL}/api/auth/instagram/callback`,
-      scope: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
+      scope: 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement,business_management',
     },
     facebook: {
       clientId: process.env.META_APP_ID ?? '',
       clientSecret: process.env.META_APP_SECRET ?? '',
       redirect: `${PUBLIC_URL}/api/auth/facebook/callback`,
-      scope: 'pages_show_list,pages_manage_posts,pages_read_engagement',
+      scope: 'pages_show_list,pages_manage_posts,pages_read_engagement,business_management',
     },
     tiktok: {
       clientKey: process.env.TIKTOK_CLIENT_KEY ?? '',

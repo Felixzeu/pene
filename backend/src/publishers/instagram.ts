@@ -1,6 +1,7 @@
 import { hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { loadToken } from '../lib/tokens';
+import { listPages, NO_PAGE_HINT } from './metaPages';
 import type { PublishMeta, PublishResult } from './index';
 
 // Instagram Graph API — pubblicazione Reels. Requisiti (gratuiti ma obbligatori):
@@ -8,27 +9,20 @@ import type { PublishMeta, PublishResult } from './index';
 //  - URL pubblico del video (il backend lo espone via Cloudflare Tunnel)
 // Reels: crea un media container (media_type=REELS) e poi pubblicalo.
 
-async function getPageAccessToken(): Promise<{ pageId: string; pageToken: string }> {
+async function getIgAccount(): Promise<{ igUserId: string; pageToken: string }> {
   const { accessToken } = await loadToken('instagram');
-  const res = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${accessToken}`);
-  const data = (await res.json()) as { data?: { id: string; access_token: string }[] };
-  const page = data.data?.[0];
-  if (!page) throw new AppError(ERR.publishFailed('Instagram', 'nessuna Pagina Facebook collegata'), 400);
-  return { pageId: page.id, pageToken: page.access_token };
-}
-
-async function getIgUserId(pageToken: string, pageId: string): Promise<string> {
-  const res = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=instagram_business_account&access_token=${pageToken}`);
-  const data = (await res.json()) as { instagram_business_account?: { id: string } };
-  if (!data.instagram_business_account) {
-    throw new AppError(ERR.publishFailed('Instagram', 'account Business non collegato alla Pagina'), 400);
+  const pages = await listPages(accessToken, 'Instagram');
+  if (pages.length === 0) throw new AppError(ERR.publishFailed('Instagram', NO_PAGE_HINT), 400);
+  // La Pagina giusta è quella con un account Instagram professionale collegato.
+  const page = pages.find((p) => p.instagram_business_account?.id);
+  if (!page?.instagram_business_account) {
+    throw new AppError(ERR.publishFailed('Instagram', `la Pagina ${pages[0].name ?? ''} non ha un account Instagram professionale collegato (Instagram > Modifica profilo > Pagina).`), 400);
   }
-  return data.instagram_business_account.id;
+  return { igUserId: page.instagram_business_account.id, pageToken: page.access_token };
 }
 
 export const instagramPublish = async (meta: PublishMeta): Promise<PublishResult> => {
-  const { pageId, pageToken } = await getPageAccessToken();
-  const igUserId = await getIgUserId(pageToken, pageId);
+  const { igUserId, pageToken } = await getIgAccount();
 
   // 1. Container del Reel (attende che Meta scarichi il video dall'URL pubblico).
   const container = await fetch(

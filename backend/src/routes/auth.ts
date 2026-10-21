@@ -1,7 +1,8 @@
+import { listPages, NO_PAGE_HINT } from '../publishers/metaPages';
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { config } from '../config';
-import { isLinked, saveToken } from '../lib/tokens';
+import { isLinked, loadToken, saveToken } from '../lib/tokens';
 import { AppError, ERR } from '../lib/errors';
 
 // OAuth2 per i social. L'app apre la pagina di consenso nel browser;
@@ -61,7 +62,8 @@ authRouter.get('/:provider', (req, res) => {
     pending.set(state, { provider, createdAt: Date.now() });
     const url = 'https://www.facebook.com/v21.0/dialog/oauth' +
       `?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(cfg.redirect)}` +
-      `&scope=${encodeURIComponent(cfg.scope)}&state=${state}&response_type=code`;
+      `&scope=${encodeURIComponent(cfg.scope)}&state=${state}&response_type=code` +
+      '&auth_type=rerequest'; // richiede di nuovo i permessi e la scelta delle Pagine se erano stati saltati
     res.redirect(url);
     return;
   }
@@ -162,6 +164,20 @@ authRouter.get('/:provider/callback', async (req, res, next) => {
     pending.delete(state);
 
     await exchangeCode(provider, code);
+
+    // Meta: controlla subito che la Pagina (e l'account Instagram) siano stati condivisi.
+    if (provider === 'instagram' || provider === 'facebook') {
+      const { accessToken } = await loadToken(provider);
+      const pages = await listPages(accessToken, provider).catch(() => []);
+      const ig = pages.find((p) => p.instagram_business_account?.id);
+      if (pages.length === 0) { res.send(page(`Accesso fatto, ma ${NO_PAGE_HINT}`)); return; }
+      if (provider === 'instagram' && !ig) {
+        res.send(page(`Accesso fatto, ma la Pagina ${pages[0].name ?? ''} non ha un account Instagram professionale collegato.`));
+        return;
+      }
+      res.send(page(`Account collegato! Pagina: ${(ig ?? pages[0]).name ?? 'ok'}. Puoi tornare nell app.`));
+      return;
+    }
 
     res.send(page('Account collegato! Puoi tornare nell app.'));
   } catch (e) {

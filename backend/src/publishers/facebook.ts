@@ -1,6 +1,7 @@
 import { hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { loadToken } from '../lib/tokens';
+import { listPages, NO_PAGE_HINT } from './metaPages';
 import type { PublishMeta, PublishResult } from './index';
 
 // Facebook Pages API — video Reel sulla Pagina (gratuito, quota generosa).
@@ -12,10 +13,8 @@ export const facebookPublish = async (meta: PublishMeta): Promise<PublishResult>
   const { accessToken } = await loadToken('facebook');
 
   // Trova la prima Pagina gestita.
-  const pages = await fetch(`${GRAPH}/me/accounts?access_token=${accessToken}`);
-  const pagesData = (await pages.json()) as { data?: { id: string; access_token: string }[] };
-  const page = pagesData.data?.[0];
-  if (!page) throw new AppError(ERR.publishFailed('Facebook', 'nessuna Pagina collegata'), 400);
+  const page = (await listPages(accessToken, 'Facebook'))[0];
+  if (!page) throw new AppError(ERR.publishFailed('Facebook', NO_PAGE_HINT), 400);
 
   const caption = [meta.title, meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n');
 
