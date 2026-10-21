@@ -72,7 +72,9 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
 
   // Video senza traccia audio (es. microfono non attivo): niente trascrizione né taglio
   // dei silenzi, ma il video si può comunque montare con testi e media.
-  if (!(await hasAudioStream(job.rawPath))) {
+  const withAudio = await hasAudioStream(job.rawPath);
+  console.log(`[edit] ${job.jobId}: video ricevuto ${withAudio ? 'CON' : 'SENZA'} traccia audio`);
+  if (!withAudio) {
     report('editing', 0.4, 'Il video non ha audio: lo preparo senza sottotitoli…');
     const silentOut = path.join(work, 'clean.mp4');
     await ff(
