@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+.expo
+.rork
+skills
+dist/
+
+# backend: file temporanei e dati locali
+backend/tmp/
+backend/data/
+backend/public/videos/
