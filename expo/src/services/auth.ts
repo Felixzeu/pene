@@ -91,7 +91,9 @@ export async function signInWith(provider: 'google' | 'apple') {
   const redirectTo = ExpoLinking.createURL('login');
   const { data, error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true } });
   if (error || !data?.url) throw new Error(it(error?.message ?? 'Accesso non disponibile.'));
+  console.log(`[login] ${provider}: ritorno su ${redirectTo}`);
   const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  console.log(`[login] risultato: ${res.type}${'url' in res ? ` ${res.url.replace(/code=[^&]+/, 'code=…')}` : ''}`);
   if (res.type !== 'success') return; // finestra chiusa: niente da fare
   const q = ExpoLinking.parse(res.url).queryParams ?? {};
   if (q.error_description || q.error) throw new Error(it(String(q.error_description ?? q.error)));
