@@ -60,11 +60,12 @@ authRouter.get('/:provider', (req, res) => {
   let user: User = { id: 'local' };
   if (accountsEnabled()) {
     const t = typeof req.query.ticket === 'string' ? tickets.get(req.query.ticket) : undefined;
-    if (!t) {
+    if (!t || Date.now() - t.createdAt > 120000) {
       res.status(401).send(page('Apri il collegamento dall\'app viral (Pubblica → Collega): il link è valido 2 minuti.'));
       return;
     }
-    tickets.delete(req.query.ticket as string);
+    // Il biglietto resta valido per i suoi 2 minuti: se il browser ricarica la pagina
+    // (es. "Richiedi sito desktop" su iPhone) il login riparte invece di fallire.
     user = t.user;
   }
 
