@@ -22,7 +22,10 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
 }) {
   const [title, setTitle] = useState(project.scriptResult?.title ?? '');
   const [description, setDescription] = useState('');
-  const [hashtags, setHashtags] = useState((project.scriptResult?.hashtags ?? []).join(' '));
+  // #viral è sempre aggiunto dal backend; lo mostriamo già qui.
+  const [hashtags, setHashtags] = useState(
+    ['viral', ...(project.scriptResult?.hashtags ?? []).filter((h) => h.toLowerCase() !== 'viral')].join(' '),
+  );
   const [selected, setSelected] = useState<ProviderId[]>(['youtube']);
   const [busy, setBusy] = useState<ProviderId[]>([]);
   const [error, setError] = useState<string | null>(null);

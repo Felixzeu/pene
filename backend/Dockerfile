@@ -21,6 +21,7 @@ RUN curl -L -o /models/ggml-base.bin https://huggingface.co/ggml-org/whisper.cpp
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY assets ./assets
 RUN mkdir -p public/videos data tmp
 ENV WHISPER_BIN=/usr/local/bin/whisper-cli WHISPER_MODEL=/models/ggml-base.bin
 EXPOSE 3000

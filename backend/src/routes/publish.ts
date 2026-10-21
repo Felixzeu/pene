@@ -20,6 +20,8 @@ export const publishRouter = Router();
 publishRouter.post('/', async (req, res, next) => {
   try {
     const body = schema.parse(req.body);
+    // L'app si chiama viral: #viral sempre presente, in testa e senza doppioni.
+    body.hashtags = ['viral', ...body.hashtags.filter((h) => h.replace(/^#/, '').toLowerCase() !== 'viral')].slice(0, 15);
     const job = getJob(body.jobId);
     if (!job?.finalPath) throw new AppError(ERR.jobNotFound, 404);
 

@@ -11,7 +11,8 @@ import { defaultSpec, hasAudioStream, probeDuration, renderFinal } from './rende
 // Pipeline di montaggio, 100% open source e in locale:
 //  1. audio → WAV per Whisper, trascrizione con timestamp per parola
 //  2. taglio dei silenzi calcolati dai timestamp (sincronizzato con i sottotitoli)
-//  3. pulizia audio: riduzione rumore (afftdn) + normalizzazione (loudnorm)
+//  3. pulizia audio: rimozione del rumore con rete neurale RNNoise (arnndn, come Krisp)
+//     + riduzione residua (afftdn) + normalizzazione (loudnorm)
 //  4. sottotitoli .ass stile social con parola evidenziata, incollati con burn-in
 //  5. export MP4 H.264 1080x1920, 30 fps (lib/render.ts, riusato dalle modifiche)
 
@@ -23,6 +24,16 @@ function ff(...args: string[]): Promise<string> {
     p.on('error', () => reject(new AppError(ERR.ffmpegMissing, 500)));
     p.on('close', (code) => (code === 0 ? resolve(stderr) : reject(new AppError(`FFmpeg ha restituito un errore (${code}): ${stderr.slice(-300)}`, 500))));
   });
+}
+
+/**
+ * Modello RNNoise "somnolent-hogwash" (voce parlata registrata con rumore di fondo),
+ * da github.com/GregorR/rnnoise-models. Percorso relativo alla cartella di lavoro:
+ * su Windows un percorso assoluto contiene "C:" e andrebbe escapato nel filtro.
+ */
+function rnnoiseModel(): string {
+  const abs = path.join(__dirname, '..', '..', 'assets', 'rnnoise', 'sh.rnnn');
+  return path.relative(process.cwd(), abs).replace(/\\/g, '/');
 }
 
 /** Calcola gli intervalli da mantenere, tagliando le pause oltre soglia. */
@@ -103,7 +114,12 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   // 2. Pulizia audio + normalizzazione.
   report('editing', 0.65, 'Pulizia dell audio…');
   const cleanOut = path.join(work, 'clean.mp4');
-  await ff('-i', cutOut, '-af', 'afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'copy', cleanOut);
+  try {
+    await ff('-i', cutOut, '-af', `aresample=48000,arnndn=m='${rnnoiseModel()}',afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11`, '-c:v', 'copy', cleanOut);
+  } catch {
+    // FFmpeg senza arnndn o modello mancante: solo il filtro classico.
+    await ff('-i', cutOut, '-af', 'afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'copy', cleanOut);
+  }
 
   job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
   await finish(job, cleanOut, report);

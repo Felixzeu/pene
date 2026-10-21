@@ -46,9 +46,9 @@ export default function HomeScreen({ onNew, onResume }: {
       <View style={styles.hero}>
         <View style={styles.heroBadge}>
           <Clapperboard size={14} color={colors.warm} />
-          <Text style={styles.heroBadgeText}>STUDIO</Text>
+          <Text style={styles.heroBadgeText}>VIRAL</Text>
         </View>
-        <Text style={styles.heroTitle}>Dal idea al video{'\n'}pubblicato. Un flusso.</Text>
+        <Text style={styles.heroTitle}>Dall'idea al video{'\n'}pubblicato. Un flusso.</Text>
         <Text style={styles.heroSub}>
           Script, teleprompter, montaggio automatico e pubblicazione: tutto in un'unica app.
         </Text>
