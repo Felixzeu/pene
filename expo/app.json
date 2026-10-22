@@ -1,18 +1,20 @@
 {
   "expo": {
-    "name": "CreatorPrompt",
-    "slug": "creatorprompt",
+    "name": "viral",
+    "slug": "viral",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0B0A0E",
-    "assetBundlePatterns": ["**/*"],
+    "backgroundColor": "#121212",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "CreatorPrompt usa la fotocamera per registrare il tuo video.",
-        "NSMicrophoneUsageDescription": "CreatorPrompt usa il microfono per registrare l'audio del tuo video.",
-        "NSPhotoLibraryAddUsageDescription": "CreatorPrompt può salvare i video montati nella tua galleria."
+        "NSCameraUsageDescription": "viral usa la fotocamera per registrare il tuo video.",
+        "NSMicrophoneUsageDescription": "viral usa il microfono per registrare l'audio del tuo video.",
+        "NSPhotoLibraryAddUsageDescription": "viral può salvare i video montati nella tua galleria."
       }
     },
     "android": {
@@ -22,17 +24,20 @@
         "INTERNET"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0B0A0E"
+        "backgroundColor": "#121212",
+        "foregroundImage": "./assets/icon.png"
       }
     },
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "Permetti a CreatorPrompt di usare la fotocamera per registrare il video."
+          "cameraPermission": "Permetti a viral di usare la fotocamera per registrare il video."
         }
       ],
       "expo-video"
-    ]
+    ],
+    "icon": "./assets/icon.png",
+    "scheme": "viral"
   }
 }

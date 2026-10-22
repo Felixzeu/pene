@@ -12,10 +12,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radius } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, fonts, gradient, radius } from '../theme';
 
-// Piccolo design system condiviso: superfici scure, bordi sottili, un solo colore
-// d'accento (rosso segnale) usato dove conta davvero.
+// Piccolo design system condiviso (stile Neon): superfici scure viola, bordi sottili,
+// pulsante principale in gradiente rosa→viola con alone, titoli in Space Grotesk.
 
 export function Screen({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
@@ -49,26 +50,36 @@ export function Btn({ label, onPress, variant = 'primary', loading, disabled, ic
   disabled?: boolean; icon?: React.ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   const v = variants[variant];
+  const content = (
+    <>
+      {loading ? <ActivityIndicator color={v.label.color as string} /> : icon}
+      <Text style={[styles.btnLabel, v.label]}>{label}</Text>
+    </>
+  );
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.btn, v.btn,
+        variant === 'primary' && styles.glow,
         (disabled || loading) && { opacity: 0.45 },
         pressed && { transform: [{ scale: 0.97 }] },
         style,
       ]}
     >
-      {loading ? <ActivityIndicator color={v.label.color as string} /> : icon}
-      <Text style={[styles.btnLabel, v.label]}>{label}</Text>
+      {variant === 'primary' ? (
+        <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.btnFill}>
+          {content}
+        </LinearGradient>
+      ) : content}
     </Pressable>
   );
 }
 
 const variants: Record<BtnVariant, { btn: ViewStyle; label: TextStyle }> = {
-  primary: { btn: { backgroundColor: colors.accent }, label: { color: '#fff' } },
-  warm: { btn: { backgroundColor: colors.warm }, label: { color: '#221704' } },
+  primary: { btn: { paddingHorizontal: 0 }, label: { color: colors.onAccent } },
+  warm: { btn: { backgroundColor: colors.warm }, label: { color: colors.onWarm } },
   ghost: { btn: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border }, label: { color: colors.text } },
   danger: { btn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.err }, label: { color: colors.err } },
 };
@@ -82,7 +93,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
         selected && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
       ]}
     >
-      <Text style={[styles.chipText, selected && { color: colors.accent, fontWeight: '700' }]}>{label}</Text>
+      <Text style={[styles.chipText, selected && { color: colors.accent, fontFamily: fonts.semibold }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -154,24 +165,29 @@ export function Badge({ text, tone = 'dim' }: { text: string; tone?: 'dim' | 'ok
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   backText: { color: colors.text, fontSize: 26, lineHeight: 30, marginTop: -3 },
-  title: { color: colors.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  title: { color: colors.text, fontSize: 26, fontFamily: fonts.display, letterSpacing: -0.8 },
   subtitle: { color: colors.textDim, fontSize: 13, marginTop: 2 },
   btn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     height: 54, borderRadius: radius.md, paddingHorizontal: 22,
   },
-  btnLabel: { fontSize: 16, fontWeight: '700' },
+  btnLabel: { fontSize: 16, fontFamily: fonts.display },
+  btnFill: {
+    flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingHorizontal: 22, borderRadius: radius.md,
+  },
+  glow: { shadowColor: colors.accent2, shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
   chip: { paddingHorizontal: 16, height: 38, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: 'center' },
   chipText: { color: colors.textDim, fontSize: 13.5 },
   chipRow: { gap: 8, paddingVertical: 2 },
   field: { marginBottom: 18 },
-  fieldLabel: { color: colors.text, fontSize: 13.5, fontWeight: '700', marginBottom: 8, letterSpacing: 0.2 },
+  fieldLabel: { color: colors.text, fontSize: 13.5, fontFamily: fonts.semibold, marginBottom: 8, letterSpacing: 0.2 },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 6, lineHeight: 17 },
   input: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.md, color: colors.text, paddingHorizontal: 14, fontSize: 15,
+    borderRadius: radius.lg, color: colors.text, paddingHorizontal: 14, fontSize: 15,
   },
   textArea: { minHeight: 110, paddingTop: 12, lineHeight: 21 },
   track: { height: 5, borderRadius: 3, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },

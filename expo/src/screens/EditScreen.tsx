@@ -4,9 +4,10 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { AlertTriangle, CheckCircle2, Loader2, Share2, Sparkles, Subtitles, Wand2, Zap } from 'lucide-react-native';
 import { Badge, Btn, Header, Screen } from '../components/ui';
 import { colors, radius } from '../theme';
-import { getJob } from '../services/api';
+import { getJob, uploadForEdit } from '../services/api';
 import { upsertProject } from '../services/history';
 import type { Job, Project, Word } from '../types';
+import { t, tServer } from '../i18n';
 
 const STEPS = [
   { key: 'queued', label: 'In coda', icon: Loader2 },
@@ -21,16 +22,19 @@ const STEP_ORDER: Record<string, number> = { queued: 0, transcribing: 1, editing
 // Quando la pipeline ha tagliato i silenzi, il backend espone anche un video
 // "anteprima" (già tagliato, senza sottotitoli incollati) e la timeline delle
 // parole: qui li componiamo in tempo reale mentre l'export finale prosegue.
-export default function EditScreen({ project, onBack, onReady, onHome }: {
+export default function EditScreen({ project, onBack, onReady, onModify, onHome }: {
   project: Project;
   onBack: () => void;
   onReady: (p: Project) => void;
+  onModify: (p: Project) => void;
   onHome: () => void;
 }) {
+  const [jobId, setJobId] = useState(project.jobId);
   const [job, setJob] = useState<Job | null>(
     project.jobId ? { jobId: project.jobId, stage: 'queued', progress: 0.1 } : null,
   );
   const [failed, setFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const stopRef = useRef(false);
   const finalUrl = job?.finalVideoUrl;
   const previewUrl = job?.previewUrl;
@@ -42,26 +46,32 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
   );
 
   useEffect(() => {
-    if (!project.jobId) return;
+    if (!jobId) return;
     stopRef.current = false;
     const poll = async () => {
+      let fails = 0;
       while (!stopRef.current) {
         try {
-          const j = await getJob(project.jobId as string);
+          const j = await getJob(jobId);
+          fails = 0;
           setJob(j);
           if (j.stage === 'ready' || j.stage === 'error') {
             if (j.stage === 'error') setFailed(true);
             return;
           }
-        } catch {
-          // errore di rete momentaneo: riprova al giro successivo
+        } catch (e) {
+          // Errore momentaneo: si riprova. Se continua, lo mostriamo invece di restare fermi.
+          fails += 1;
+          const msg = e instanceof Error ? tServer(e.message) : t('Errore di rete.');
+          if (/non trovato|scaduto/i.test(msg)) { setJob((j) => (j ? { ...j, stage: 'error', message: msg } : j)); setFailed(true); return; }
+          if (fails >= 3) setJob((j) => (j ? { ...j, message: t('Non riesco a leggere lo stato: {msg}', { msg }) } : j));
         }
         await new Promise((r) => setTimeout(r, 3000));
       }
     };
     poll();
     return () => { stopRef.current = true; };
-  }, [project.jobId]);
+  }, [jobId]);
 
   // Autoplay sia dell'anteprima live che del video finale.
   useEffect(() => {
@@ -85,26 +95,43 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
   // Quando il job è pronto salviamo il risultato nella cronologia.
   useEffect(() => {
     if (finalUrl) {
-      const next = { ...project, finalVideoUrl: finalUrl };
+      const next = { ...project, jobId, finalVideoUrl: finalUrl };
       upsertProject(next);
     }
   }, [finalUrl]);
 
-  if (!project.jobId) return null;
+  // Riprova: ricarica il video grezzo e avvia un nuovo job di montaggio.
+  const retry = async () => {
+    if (!project.rawVideoUri) return;
+    setRetrying(true);
+    try {
+      const { jobId: next } = await uploadForEdit(project.rawVideoUri, project, () => {});
+      upsertProject({ ...project, jobId: next });
+      setFailed(false);
+      setJob({ jobId: next, stage: 'queued', progress: 0.1 });
+      setJobId(next);
+    } catch (e) {
+      setJob((j) => (j ? { ...j, message: e instanceof Error ? tServer(e.message) : t('Riprova non riuscita.') } : j));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  if (!jobId) return null;
 
   const current = job ? STEP_ORDER[job.stage] ?? 0 : 0;
-  const errorMsg = failed ? job?.message ?? 'Il montaggio è fallito. Riprova.' : null;
+  const errorMsg = failed ? (job?.message ? tServer(job.message) : t('Il montaggio è fallito. Riprova.')) : null;
 
   return (
     <Screen>
       <Header
-        title={finalUrl ? 'Video pronto' : isPreview ? 'Montaggio live' : 'Montaggio in corso'}
+        title={finalUrl ? t('Video pronto') : isPreview ? t('Montaggio live') : t('Montaggio in corso')}
         subtitle={
           finalUrl
-            ? 'Ecco il risultato finale'
+            ? t('Ecco il risultato finale')
             : isPreview
-              ? 'Guarda sottotitoli e taglio dei silenzi mentre li applichiamo'
-              : 'Lavoriamo sul tuo video, puoi tenere aperta questa schermata'
+              ? t('Guarda sottotitoli e taglio dei silenzi mentre li applichiamo')
+              : t('Lavoriamo sul tuo video, puoi tenere aperta questa schermata')
         }
         onBack={onBack}
       />
@@ -117,7 +144,7 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
             {isPreview && (
               <View style={styles.liveBadge} pointerEvents="none">
                 <Zap size={12} color={colors.warm} />
-                <Text style={styles.liveText}>ANTEPRIMA LIVE · {Math.round((job?.progress ?? 0) * 100)}%</Text>
+                <Text style={styles.liveText}>{t('ANTEPRIMA LIVE')} · {Math.round((job?.progress ?? 0) * 100)}%</Text>
               </View>
             )}
           </View>
@@ -137,14 +164,15 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
                         : <Icon size={16} color={active ? colors.accent : colors.textDim} />}
                   </View>
                   <Text style={[steps.label, { color: active || done ? colors.text : colors.textDim }]}>
-                    {s.label}
+                    {t(s.label)}
                   </Text>
-                  {active && <Badge text="in corso" tone="accent" />}
+                  {active && <Badge text={t('in corso')} tone="accent" />}
                 </View>
               );
             })}
             <View style={{ marginTop: 14 }}>
               <Text style={steps.pct}>{Math.round((job?.progress ?? current / 4) * 100)}%</Text>
+              {!failed && job?.message ? <Text style={[steps.pct, { textAlign: 'left', marginTop: 6 }]}>{tServer(job.message)}</Text> : null}
             </View>
           </View>
         )}
@@ -157,10 +185,17 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
               return (
                 <View key={s.key} style={[steps.stageChip, active && { borderColor: colors.accent }]}>
                   <View style={[steps.stageDot, done && { backgroundColor: colors.ok }, active && { backgroundColor: colors.accent }]} />
-                  <Text style={[steps.stageLabel, { color: done || active ? colors.text : colors.textDim }]}>{s.label}</Text>
+                  <Text style={[steps.stageLabel, { color: done || active ? colors.text : colors.textDim }]}>{t(s.label)}</Text>
                 </View>
               );
             })}
+          </View>
+        )}
+
+        {finalUrl && job?.warning && (
+          <View style={[steps.errorBox, { backgroundColor: 'rgba(255,180,67,0.12)' }]}>
+            <AlertTriangle size={18} color={colors.warm} />
+            <Text style={[steps.errorText, { color: colors.warm }]}>{tServer(job.warning)}</Text>
           </View>
         )}
 
@@ -174,18 +209,19 @@ export default function EditScreen({ project, onBack, onReady, onHome }: {
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
           {finalUrl ? (
             <>
-              <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
-              <Btn label="Pubblica" icon={<Share2 size={17} color="#fff" />} onPress={() => onReady({ ...project, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
+              <Btn label={t('Modifica')} variant="ghost" icon={<Wand2 size={17} color={colors.text} />} onPress={() => onModify({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1 }} />
+              <Btn label={t('Pubblica')} icon={<Share2 size={17} color={colors.onAccent} />} onPress={() => onReady({ ...project, jobId, finalVideoUrl: finalUrl })} style={{ flex: 1.6 }} />
             </>
           ) : (
             <>
-              <Btn label="Chiudi" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
+              <Btn label={t('Chiudi')} variant="ghost" onPress={onHome} style={{ flex: 1 }} />
               <Btn
-                label="Riprova montaggio"
+                label={t('Riprova montaggio')}
                 variant="warm"
-                icon={<Sparkles size={17} color="#221704" />}
-                onPress={() => { setFailed(false); stopRef.current = true; }}
-                disabled={!failed}
+                icon={<Sparkles size={17} color={colors.onWarm} />}
+                onPress={retry}
+                loading={retrying}
+                disabled={!failed || !project.rawVideoUri}
                 style={{ flex: 1.6 }}
               />
             </>

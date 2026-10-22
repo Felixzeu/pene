@@ -1,11 +1,14 @@
+import { cleanTitle, normalizeHashtags } from '../lib/tags';
 import { Router } from 'express';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { tiktokCreator } from '../publishers/tiktok';
 import { z } from 'zod';
-import { config, paths } from '../lib/config-bridge';
+import { config } from '../lib/config-bridge';
 import { getJob } from '../lib/queue';
 import { publishTo } from '../publishers';
 import { AppError, ERR } from '../lib/errors';
+import { charge, refund } from '../lib/coins';
+import { currentUser } from '../lib/user';
+import { markPublished } from '../lib/videos';
 
 const schema = z.object({
   jobId: z.string().min(1),
@@ -13,15 +16,38 @@ const schema = z.object({
   title: z.string().min(1).max(100),
   description: z.string().max(2200).default(''),
   hashtags: z.array(z.string().max(40)).max(15).default([]),
+  settings: z.object({
+    youtube: z.object({
+      privacy: z.enum(['public', 'unlisted', 'private']).optional(),
+      madeForKids: z.boolean().optional(),
+      notifySubscribers: z.boolean().optional(),
+      category: z.string().regex(/^\d{1,3}$/).optional(),
+    }).optional(),
+    instagram: z.object({ shareToFeed: z.boolean().optional() }).optional(),
+    facebook: z.object({ state: z.enum(['PUBLISHED', 'DRAFT']).optional() }).optional(),
+    tiktok: z.object({
+      disableComment: z.boolean().optional(),
+      disableDuet: z.boolean().optional(),
+      disableStitch: z.boolean().optional(),
+    }).optional(),
+  }).default({}),
 });
 
 export const publishRouter = Router();
+
+// GET /api/publish/tiktok/creator — nome dell'account TikTok e se può pubblicare ora.
+publishRouter.get('/tiktok/creator', async (_req, res, next) => {
+  try { res.json(await tiktokCreator()); } catch (e) { next(e); }
+});
 
 // POST /api/publish — pubblica sui social scelti, uno per volta.
 // Ogni social è indipendente: se uno fallisce gli altri proseguono.
 publishRouter.post('/', async (req, res, next) => {
   try {
     const body = schema.parse(req.body);
+    // #viralAPP sempre presente, in testa e senza doppioni.
+    body.hashtags = normalizeHashtags(body.hashtags);
+    body.title = cleanTitle(body.title, 100) || 'Nuovo video';
     const job = getJob(body.jobId);
     if (!job?.finalPath) throw new AppError(ERR.jobNotFound, 404);
 
@@ -30,7 +56,10 @@ publishRouter.post('/', async (req, res, next) => {
 
     const results = await Promise.all(
       body.providers.map(async (provider) => {
+        // Ogni social costa a parte: se la pubblicazione fallisce, i coin tornano indietro.
+        let paid = 0;
         try {
+          paid = await charge('publish', provider);
           const out = await publishTo(provider, {
             title: body.title,
             description: body.description,
@@ -38,9 +67,11 @@ publishRouter.post('/', async (req, res, next) => {
             videoUrl,
             filePath: job.finalPath as string,
             language: job.language,
+            settings: body.settings,
           });
           return { provider, status: 'published' as const, url: out.url, message: out.message };
         } catch (e) {
+          await refund(currentUser().id, paid, 'publish');
           return {
             provider,
             status: 'error' as const,
@@ -50,10 +81,10 @@ publishRouter.post('/', async (req, res, next) => {
       }),
     );
 
-    // Il link temporaneo può essere rimosso dopo la pubblicazione (finale + anteprima live).
-    fs.rm(job.finalPath, { force: true }).catch(() => { /* già rimosso */ });
-    fs.rm(path.join(paths.videos, `${job.jobId}-preview.mp4`), { force: true }).catch(() => { /* già rimosso */ });
+    // Il video resta su disco per permettere "Riprova" o altri social:
+    // la pulizia periodica in index.ts lo rimuove dopo 24 ore.
 
+    await markPublished(job.jobId, results.filter((r) => r.status === 'published'));
     res.json({ results });
   } catch (e) {
     next(e);

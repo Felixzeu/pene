@@ -1,0 +1,354 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, Link2, RotateCcw, Send, Wand2 } from 'lucide-react-native';
+import PublishSettingsPanel from '../components/PublishSettingsPanel';
+import { DEFAULT_SETTINGS, loadPublishSettings, savePublishSettings } from '../services/publishSettings';
+import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
+import { colors, radius } from '../theme';
+import { PROVIDERS, type ProviderId } from '../config';
+import { linkedProviders, mediaUrl, publishVideo, tiktokCreator, unlinkProvider } from '../services/api';
+import { saveVideoToPhotos } from '../services/download';
+import { linkSocial } from '../services/social';
+import { upsertProject } from '../services/history';
+import type { Project, PublishOutcome, PublishSettings } from '../types';
+import { t, tServer } from '../i18n';
+
+/** L'hashtag fisso dell'app, sempre primo (come BRAND_TAG nel backend). */
+const BRAND_TAG = 'viralAPP';
+
+// Pubblicazione sui social: ogni social è indipendente. Si collega l'account
+// una volta (OAuth nel browser), si scelgono i social e si pubblica; se uno
+// fallisce gli altri restano pubblicati e si può premere "Riprova" solo su quello.
+export default function PublishScreen({ project, onBack, onHome, onModify, update }: {
+  project: Project;
+  onBack: () => void;
+  onHome: () => void;
+  onModify: (p: Project) => void;
+  update: (p: Project) => void;
+}) {
+  const [title, setTitle] = useState((project.scriptResult?.title ?? '').replace(/#\S+/g, '').replace(/\s+/g, ' ').trim());
+  const [description, setDescription] = useState('');
+  // #viralAPP è fisso (non si può togliere): nel campo ci sono solo gli altri hashtag.
+  const [hashtags, setHashtags] = useState(cleanTags(project.scriptResult?.hashtags ?? []).map((h) => `#${h}`).join(' '));
+  const [selected, setSelected] = useState<ProviderId[]>(['youtube']);
+  const [busy, setBusy] = useState<ProviderId[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const outcomes = project.published ?? [];
+  const [settings, setSettings] = useState<PublishSettings>(DEFAULT_SETTINGS);
+  const [open, setOpen] = useState<ProviderId | null>(null);
+  useEffect(() => { loadPublishSettings().then(setSettings); }, []);
+  const changeSettings = (s: PublishSettings) => { setSettings(s); savePublishSettings(s); };
+
+  // Social già collegati sul backend (anche se collegati dal PC): si aggiorna
+  // quando l'app torna in primo piano dopo il login nel browser.
+  const [linked, setLinked] = useState<Partial<Record<ProviderId, boolean>>>({});
+  const refreshLinked = useCallback(() => { linkedProviders().then(setLinked).catch(() => {}); }, []);
+  useEffect(() => {
+    refreshLinked();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') refreshLinked(); });
+    return () => sub.remove();
+  }, [refreshLinked]);
+
+  // Collegamento dentro l'app: finestra di login di sistema che si chiude da sola
+  // quando il backend rimanda a viral (exp:// in Expo Go) con l'esito.
+  const [linking, setLinking] = useState<ProviderId | null>(null);
+  const connect = async (id: ProviderId) => {
+    setLinking(id);
+    try {
+      const r = await linkSocial(id);
+      if (r) Alert.alert(r.ok ? t('Collegato!') : t('Collegamento non riuscito'), tServer(r.message));
+    } catch (e) {
+      Alert.alert(t('Collegamento non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
+    } finally {
+      setLinking(null);
+      refreshLinked();
+    }
+  };
+  const disconnect = (id: ProviderId, label: string) =>
+    Alert.alert(t('Scollegare {name}?', { name: label }), t('Potrai ricollegarlo quando vuoi.'), [
+      { text: t('Annulla'), style: 'cancel' },
+      { text: t('Scollega'), style: 'destructive', onPress: () => unlinkProvider(id).then(refreshLinked).catch(() => {}) },
+    ]);
+
+  const videoUrl = mediaUrl(project.finalVideoUrl);
+  const player = useVideoPlayer(videoUrl ? { uri: videoUrl } : null, (p) => { p.loop = true; });
+
+  const outcomeOf = (id: ProviderId) => outcomes.find((o) => o.provider === id);
+  const toggle = (id: ProviderId) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  const publish = async (providers: ProviderId[]) => {
+    if (!project.jobId || providers.length === 0) return;
+    if (!title.trim()) { setError(t('Scrivi un titolo prima di pubblicare.')); return; }
+    setError(null);
+    setBusy(providers);
+    try {
+      const { results } = await publishVideo({
+        jobId: project.jobId,
+        providers,
+        title: title.trim().slice(0, 100),
+        description: description.trim(),
+        hashtags: [BRAND_TAG, ...cleanTags(hashtags)].slice(0, 15),
+        settings,
+      });
+      // Unisce i nuovi esiti a quelli precedenti (un "Riprova" sostituisce solo il suo social).
+      const merged: PublishOutcome[] = [
+        ...outcomes.filter((o) => !providers.includes(o.provider)),
+        ...results,
+      ];
+      const next = { ...project, published: merged };
+      await upsertProject(next);
+      update(next);
+    } catch (e) {
+      setError(e instanceof Error ? tServer(e.message) : t('Pubblicazione non riuscita.'));
+    } finally {
+      setBusy([]);
+    }
+  };
+
+  const download = async () => {
+    if (!videoUrl) return;
+    setSaving(true);
+    try {
+      await saveVideoToPhotos(videoUrl);
+      Alert.alert(t('Video salvato'), t('Lo trovi nell\'app Foto.'));
+    } catch (e) {
+      Alert.alert(t('Salvataggio non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pending = selected.filter((id) => outcomeOf(id)?.status !== 'published');
+
+  // TikTok chiede di mostrare con quale account si pubblica e la conferma sull'uso della musica.
+  const tiktokOn = pending.includes('tiktok') && !!linked.tiktok;
+  const [creator, setCreator] = useState<Awaited<ReturnType<typeof tiktokCreator>> | null>(null);
+  useEffect(() => {
+    if (tiktokOn && !creator) tiktokCreator().then(setCreator).catch(() => {});
+  }, [tiktokOn, creator]);
+
+  return (
+    <Screen>
+      <Header title={t('Pubblica')} subtitle={t('Scegli i social e pubblica il video montato')} onBack={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        {videoUrl ? (
+          <View style={styles.playerWrap}>
+            <VideoView player={player} style={styles.player} contentFit="contain" />
+          </View>
+        ) : null}
+        {videoUrl ? (
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 22 }}>
+            <Btn
+              label={t('Modifica')}
+              variant="ghost"
+              icon={<Wand2 size={17} color={colors.text} />}
+              onPress={() => onModify(project)}
+              style={{ flex: 1 }}
+            />
+            <Btn
+              label={t('Salva')}
+              variant="ghost"
+              icon={<Download size={17} color={colors.text} />}
+              onPress={download}
+              loading={saving}
+              style={{ flex: 1 }}
+            />
+          </View>
+        ) : null}
+
+        <Field label={t('Titolo')}>
+          <Input value={title} onChangeText={setTitle} maxLength={100} placeholder={t('Il titolo del video')} style={{ height: 50 }} />
+        </Field>
+        <Field label={t('Descrizione')} hint={t('Facoltativa. Gli hashtag vengono aggiunti in automatico.')}>
+          <TextArea value={description} onChangeText={setDescription} maxLength={2200} placeholder={t('Racconta il video in due righe')} />
+        </Field>
+        <Field label={t('Hashtag')} hint={t('#viralAPP c\'è sempre. Aggiungi gli altri separati da spazio.')}>
+          <View style={styles.tagRow}>
+            <View style={styles.tagLocked}><Text style={styles.tagLockedText}>#{BRAND_TAG}</Text></View>
+            <Input
+              value={hashtags}
+              onChangeText={setHashtags}
+              onBlur={() => setHashtags(cleanTags(hashtags).map((h) => `#${h}`).join(' '))}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={t('#tema #nicchia')}
+              style={{ height: 50, flex: 1 }}
+            />
+          </View>
+        </Field>
+
+        {/* Come apparirà sotto il video: testo e hashtag insieme. */}
+        <View style={styles.captionBox}>
+          <Text style={styles.captionLabel}>{t('Anteprima della didascalia')}</Text>
+          {!!title.trim() && <Text style={styles.captionTitle}>{title.trim()}</Text>}
+          {!!description.trim() && <Text style={styles.captionText}>{description.trim()}</Text>}
+          <Text style={styles.captionTags}>{[BRAND_TAG, ...cleanTags(hashtags)].slice(0, 15).map((h) => `#${h}`).join(' ')}</Text>
+        </View>
+
+        <Text style={styles.section}>{t('Social')}</Text>
+        <View style={styles.card}>
+          {PROVIDERS.map((p, i) => {
+            const o = outcomeOf(p.id);
+            const on = selected.includes(p.id);
+            const isBusy = busy.includes(p.id);
+            return (
+              <View key={p.id} style={i < PROVIDERS.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View style={styles.row}>
+                <Pressable onPress={() => toggle(p.id)} hitSlop={8} style={styles.rowMain}>
+                  <View style={[styles.check, on && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                    {on && <CheckCircle2 size={14} color="#fff" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.provider}>{p.label}</Text>
+                    {o?.message ? <Text style={[styles.msg, o.status === 'error' && { color: colors.err }]}>{tServer(o.message)}</Text> : null}
+                  </View>
+                </Pressable>
+                {isBusy ? (
+                  <Badge text="in corso" tone="accent" />
+                ) : o?.status === 'published' ? (
+                  o.url ? (
+                    <Pressable onPress={() => Linking.openURL(o.url as string)} hitSlop={8} style={styles.inline}>
+                      <Badge text="pubblicato" tone="ok" />
+                      <ExternalLink size={15} color={colors.textDim} />
+                    </Pressable>
+                  ) : <Badge text="pubblicato" tone="ok" />
+                ) : o?.status === 'error' ? (
+                  <Pressable onPress={() => publish([p.id])} hitSlop={8} style={styles.inline}>
+                    <RotateCcw size={15} color={colors.warm} />
+                    <Text style={styles.retry}>{t('Riprova')}</Text>
+                  </Pressable>
+                ) : linking === p.id ? (
+                  <Badge text="collego…" tone="accent" />
+                ) : linked[p.id] ? (
+                  <Pressable onPress={() => connect(p.id)} onLongPress={() => disconnect(p.id, p.label)} hitSlop={8} style={styles.inline}>
+                    <Badge text="collegato" tone="ok" />
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={() => connect(p.id)} hitSlop={8} style={styles.inline}>
+                    <Link2 size={15} color={colors.textDim} />
+                    <Text style={styles.link}>{t('Collega')}</Text>
+                  </Pressable>
+                )}
+                <Pressable onPress={() => setOpen(open === p.id ? null : p.id)} hitSlop={10} accessibilityLabel={`${t('Impostazioni')} ${p.label}`}>
+                  {open === p.id ? <ChevronUp size={18} color={colors.textDim} /> : <ChevronDown size={18} color={colors.textDim} />}
+                </Pressable>
+              </View>
+              {open === p.id && <PublishSettingsPanel provider={p.id} settings={settings} onChange={changeSettings} />}
+              </View>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>
+          {t('Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell\'app e si chiude da solo. Tieni premuto "collegato" per scollegare. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l\'account TikTok impostato su privato.')}
+        </Text>
+
+        {error && (
+          <View style={styles.errorBox}>
+            <AlertTriangle size={18} color={colors.err} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        {tiktokOn && (
+          <View style={styles.tiktokBox}>
+            {creator?.nickname ? (
+              <Text style={styles.tiktokText}>{t('TikTok: pubblichi come {name}', { name: creator.nickname })}</Text>
+            ) : null}
+            {creator && !creator.canPost && (
+              <Text style={[styles.tiktokText, { color: colors.err }]}>
+                {t('TikTok in questo momento non accetta nuovi post da questo account: riprova più tardi.')}
+              </Text>
+            )}
+            <Text style={styles.tiktokText}>
+              {t('Pubblicando su TikTok accetti la')}{' '}
+              <Text style={styles.tiktokLink} onPress={() => Linking.openURL('https://www.tiktok.com/legal/page/global/music-usage-confirmation/en')}>
+                {t('Music Usage Confirmation di TikTok')}
+              </Text>.
+            </Text>
+          </View>
+        )}
+
+        {/* Il pulsante dice sempre "Pubblica": quanti social sono scelti si legge qui sopra. */}
+        <Text style={styles.pendingLine}>
+          {pending.length
+            ? (pending.length === 1 ? t('1 social selezionato') : t('{n} social selezionati', { n: pending.length }))
+            : t('Nessun social da pubblicare')}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+          <Btn label={t('Home')} variant="ghost" onPress={onHome} style={{ flex: 1 }} />
+          <Btn
+            label={t('Pubblica')}
+            icon={<Send size={17} color={colors.onAccent} />}
+            onPress={() => publish(pending)}
+            loading={busy.length > 0}
+            disabled={pending.length === 0 || !project.jobId}
+            style={{ flex: 1.6 }}
+          />
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}
+
+// Hashtag puliti: niente #, spazi o simboli, minuscoli, senza doppioni e senza "viralapp" (è già fisso).
+function cleanTags(input: string[] | string): string[] {
+  const parts = Array.isArray(input) ? input.flatMap((h) => h.split(/[\s,#]+/)) : input.split(/[\s,#]+/);
+  const out: string[] = [];
+  for (const p of parts) {
+    const t = p.normalize('NFKC').replace(/[^0-9a-zA-Z\u00C0-\u024F_]/g, '').toLowerCase().slice(0, 30);
+    if (t.length < 2 || t === 'viral' || t === BRAND_TAG.toLowerCase() || out.includes(t)) continue;
+    out.push(t);
+  }
+  return out.slice(0, 14);
+}
+
+const styles = StyleSheet.create({
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tagLocked: {
+    backgroundColor: colors.accent, borderRadius: radius.md, paddingHorizontal: 12, height: 50,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tagLockedText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  tiktokBox: { marginTop: 18, padding: 12, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, gap: 4 },
+  tiktokText: { color: colors.textDim, fontSize: 12.5, lineHeight: 18 },
+  tiktokLink: { color: colors.accent, textDecorationLine: 'underline' },
+  pendingLine: { color: colors.textDim, fontSize: 12.5, textAlign: 'center', marginTop: 20 },
+  captionBox: {
+    backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    padding: 14, gap: 6, marginTop: 4,
+  },
+  captionLabel: { color: colors.textDim, fontSize: 11.5, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+  captionTitle: { color: colors.text, fontSize: 14.5, fontWeight: '700' },
+  captionText: { color: colors.text, fontSize: 13.5, lineHeight: 19 },
+  captionTags: { color: colors.accent, fontSize: 13.5, fontWeight: '600', lineHeight: 19 },
+  playerWrap: {
+    borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
+    aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 14,
+  },
+  player: { flex: 1 },
+  section: { color: colors.text, fontSize: 13.5, fontWeight: '700', marginBottom: 8, letterSpacing: 0.2 },
+  card: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.lg, paddingHorizontal: 16,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  check: {
+    width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  provider: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  msg: { color: colors.textDim, fontSize: 12, marginTop: 3, lineHeight: 16 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  link: { color: colors.textDim, fontSize: 13.5, fontWeight: '600' },
+  retry: { color: colors.warm, fontSize: 13.5, fontWeight: '700' },
+  hint: { color: colors.textDim, fontSize: 12, marginTop: 8, lineHeight: 17 },
+  errorBox: {
+    flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 16,
+    backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: radius.md, padding: 14,
+  },
+  errorText: { color: colors.err, flex: 1, fontSize: 13.5, lineHeight: 19 },
+});

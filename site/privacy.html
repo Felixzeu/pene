@@ -1,0 +1,36 @@
+<!doctype html><html lang="it"><head><title>Privacy · ViralAPP</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body><div class="wrap"><nav><a class="logo" href="/">viral<span>.</span></a><div class="links"><a href="/privacy.html">Privacy</a><a href="/terms.html">Termini</a><a href="/data-deletion.html">Cancellazione dati</a><a href="/support.html">Assistenza</a></div></nav>
+<h1>Informativa privacy</h1><p>Ultimo aggiornamento: 22 ottobre 2026</p>
+<h2>Chi è il titolare</h2><p>Il titolare del trattamento è il gestore dell'app ViralAPP ("viral"), contattabile a <a href="mailto:devvfelix@gmail.com">devvfelix@gmail.com</a> o <a href="mailto:porceddduuu@gmail.com">porceddduuu@gmail.com</a>.</p>
+<h2>Quali dati raccogliamo</h2><ul>
+<li><b>Account:</b> email e, se accedi con Google o Apple, il nome e l'identificativo forniti da loro. La password non la vediamo mai (la gestisce Supabase).</li>
+<li><b>Contenuti:</b> gli argomenti che scrivi, gli script generati, i video che registri o carichi e le foto che aggiungi al montaggio.</li>
+<li><b>Archivio dei video:</b> titolo, durata, data, dove è stato pubblicato e una piccola anteprima (un fotogramma) di ogni video montato, per mostrarti la sezione "I miei video".</li>
+<li><b>Social collegati:</b> i token di accesso che autorizzi, salvati cifrati (AES-256) sul nostro server e mai nell'app. Non conosciamo e non chiediamo mai le password dei social.</li>
+<li><b>Coin:</b> saldo e movimenti dei coin usati nell'app.</li>
+<li><b>Segnalazioni:</b> quello che scrivi in "Modmail &amp; bug report", eventuali screenshot e il contatto che lasci.</li></ul>
+<h2>Perché li usiamo</h2><p>Solo per far funzionare l'app: creare l'account, generare lo script, montare il video, pubblicarlo sui social che scegli tu, mostrarti i tuoi video e rispondere alle segnalazioni. Base giuridica: esecuzione del servizio richiesto (art. 6.1.b GDPR). Non vendiamo i tuoi dati, non facciamo profilazione e non li usiamo per pubblicità.</p>
+<h2>Social collegati: cosa chiediamo e cosa facciamo</h2>
+<p>Il collegamento avviene sempre sulla pagina ufficiale di ogni social (OAuth). Chiediamo solo i permessi necessari a pubblicare i video che scegli tu, e pubblichiamo solo quando premi "Pubblica".</p><ul>
+<li><b>YouTube (Google):</b> caricare video (<code>youtube.upload</code>) e leggere il tuo canale per verificare che esista (<code>youtube.readonly</code>).</li>
+<li><b>Instagram e Facebook (Meta):</b> elencare le tue Pagine e il profilo Instagram professionale collegato e pubblicarvi i video (<code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_posts</code>, <code>instagram_basic</code>, <code>instagram_content_publish</code>, <code>business_management</code>).</li>
+<li><b>TikTok:</b> leggere nome e foto del profilo da mostrarti prima di pubblicare (<code>user.info.basic</code>) e pubblicare i video (<code>video.publish</code>).</li></ul>
+<p>Ai social inviamo solo il video, il titolo, la descrizione, gli hashtag e le impostazioni di pubblicazione che scegli. Non leggiamo i tuoi messaggi, follower o altri contenuti.</p>
+<p>L'uso delle informazioni ricevute dalle API di Google rispetta le <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, inclusi i requisiti di Limited Use. Usando YouTube accetti anche i <a href="https://www.youtube.com/t/terms">Termini di servizio di YouTube</a> e l'<a href="https://policies.google.com/privacy">Informativa privacy di Google</a>.</p>
+<h2>Con chi li condividiamo</h2><ul>
+<li><b>Supabase</b> (account e archivio dei video).</li>
+<li><b>Google Gemini</b> (generazione e modifica degli script e del montaggio con l'IA). Sul piano gratuito Google può usare i contenuti inviati per migliorare i suoi servizi: non scrivere dati sensibili negli argomenti.</li>
+<li><b>I social che colleghi</b> (YouTube, Instagram, Facebook, TikTok), solo quando scegli di pubblicare.</li>
+<li><b>Cloudflare</b> (collegamento sicuro al nostro server e hosting di questo sito).</li></ul>
+<p>La trascrizione dei video e la rimozione dello sfondo dalle foto avvengono sul nostro server, senza inviare i file ad altri.</p>
+<h2>Per quanto tempo</h2><ul>
+<li>Video registrati, foto caricate e video montati: cancellati automaticamente dal server dopo <b>24 ore</b>.</li>
+<li>Anteprime dei video: fino a 180 giorni, o finché elimini l'account.</li>
+<li>Archivio dei video, coin e social collegati: finché elimini l'account o scolleghi il social.</li>
+<li>Segnalazioni: il tempo necessario a gestirle.</li></ul>
+<h2>Scollegare un social e revocare l'accesso</h2><p>Nell'app, in Account → <b>Social collegati</b> → "Scollega": cancelliamo il token e revochiamo l'autorizzazione anche presso il social. Puoi revocarla anche direttamente: <a href="https://myaccount.google.com/permissions">Google</a>, <a href="https://www.facebook.com/settings?tab=business_tools">Meta</a>, TikTok (Impostazioni e privacy → Sicurezza → App e servizi). Se revochi da lì, il collegamento smette di funzionare e l'app ti chiede di ricollegarlo.</p>
+<h2>I tuoi diritti</h2><p>Puoi accedere ai tuoi dati, correggerli, cancellarli o chiederne una copia. Nell'app, in Account → <b>Elimina account</b>, cancelli subito account, video sul server, anteprime e social collegati (vedi <a href="/data-deletion.html">Cancellazione dei dati</a>). Per altre richieste scrivi a <a href="mailto:devvfelix@gmail.com">devvfelix@gmail.com</a> o <a href="mailto:porceddduuu@gmail.com">porceddduuu@gmail.com</a>. Puoi anche presentare reclamo al Garante per la protezione dei dati personali.</p>
+<h2>Cookie e tracciamento</h2><p>L'app non usa cookie pubblicitari né strumenti di tracciamento o analisi. Questo sito non usa cookie; carica solo i caratteri da Google Fonts.</p>
+<h2>Sicurezza</h2><p>Le comunicazioni sono cifrate (HTTPS). I token dei social sono cifrati a riposo e restano sul server: l'app non li riceve mai. Le chiavi segrete non sono mai incluse nell'app.</p>
+<h2>Minori</h2><p>ViralAPP non è pensata per chi ha meno di 14 anni.</p>
+<h2>Modifiche</h2><p>Se cambiamo questa informativa aggiorniamo la data in alto; per modifiche importanti te lo diciamo nell'app.</p>
+<footer>© 2026 ViralAPP · Contatti: <a href="mailto:devvfelix@gmail.com">devvfelix@gmail.com</a> o <a href="mailto:porceddduuu@gmail.com">porceddduuu@gmail.com</a> · <a href="/privacy.html">Privacy</a> · <a href="/terms.html">Termini</a> · <a href="/data-deletion.html">Cancellazione dati</a> · <a href="/support.html">Assistenza</a></footer></div></body></html>

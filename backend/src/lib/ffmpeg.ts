@@ -6,37 +6,46 @@ import { AppError, ERR } from './errors';
 import { registerTask } from './queue';
 import type { Job } from './queue';
 import { transcribe, type Word } from './whisper';
+import { defaultSpec, hasAudioStream, probeDuration, renderFinal } from './render';
 
 // Pipeline di montaggio, 100% open source e in locale:
 //  1. audio → WAV per Whisper, trascrizione con timestamp per parola
 //  2. taglio dei silenzi calcolati dai timestamp (sincronizzato con i sottotitoli)
-//  3. pulizia audio: riduzione rumore (afftdn) + normalizzazione (loudnorm)
+//  3. pulizia audio: rimozione del rumore con rete neurale RNNoise (arnndn, come Krisp)
+//     + riduzione residua (afftdn) + normalizzazione (loudnorm)
 //  4. sottotitoli .ass stile social con parola evidenziata, incollati con burn-in
-//  5. export MP4 H.264 1080x1920, 30 fps
+//  5. export MP4 H.264 1080x1920, 30 fps (lib/render.ts, riusato dalle modifiche)
 
 function ff(...args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const p = spawn('ffmpeg', ['-hide_banner', '-y', ...args]);
+    // stdin chiuso: FFmpeg non resta mai in attesa di input. Limite di 15 minuti:
+    // un FFmpeg bloccato non deve fermare la coda per sempre.
+    const p = spawn('ffmpeg', ['-hide_banner', '-nostdin', '-y', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    p.stderr.on('data', (d) => { stderr += String(d); });
-    p.on('error', () => reject(new AppError(ERR.ffmpegMissing, 500)));
+    const timer = setTimeout(() => { stderr += '\n[timeout 15 minuti]'; p.kill('SIGKILL'); }, 15 * 60_000);
+    p.stderr!.on('data', (d) => { stderr = (stderr + String(d)).slice(-20000); });
+    p.on('error', () => { clearTimeout(timer); reject(new AppError(ERR.ffmpegMissing, 500)); });
+    p.on('close', () => clearTimeout(timer));
     p.on('close', (code) => (code === 0 ? resolve(stderr) : reject(new AppError(`FFmpeg ha restituito un errore (${code}): ${stderr.slice(-300)}`, 500))));
   });
 }
 
-function fmtTime(sec: number): string {
-  const cs = Math.floor((sec % 1) * 100);
-  const s = Math.floor(sec) % 60;
-  const m = Math.floor(sec / 60) % 60;
-  const h = Math.floor(sec / 3600);
-  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+/**
+ * Modello RNNoise "somnolent-hogwash" (voce parlata registrata con rumore di fondo),
+ * da github.com/GregorR/rnnoise-models. Percorso relativo alla cartella di lavoro:
+ * su Windows un percorso assoluto contiene "C:" e andrebbe escapato nel filtro.
+ */
+function rnnoiseModel(): string {
+  const abs = path.join(__dirname, '..', '..', 'assets', 'rnnoise', 'sh.rnnn');
+  return path.relative(process.cwd(), abs).replace(/\\/g, '/');
 }
 
 /** Calcola gli intervalli da mantenere, tagliando le pause oltre soglia. */
 function keepRanges(words: Word[], minSilenceSec: number): Array<{ from: number; to: number }> {
   const ranges: Array<{ from: number; to: number }> = [];
   if (words.length === 0) return [{ from: 0, to: Number.MAX_SAFE_INTEGER }];
-  let from = Math.max(0, words[0].start - 0.25);
+  // Un piccolo margine prima della prima parola e dopo l'ultima, per non tagliare la voce.
+  let from = Math.max(0, words[0].start - 0.3);
   for (let i = 0; i < words.length - 1; i++) {
     const gap = words[i + 1].start - words[i].end;
     if (gap > minSilenceSec) {
@@ -44,52 +53,47 @@ function keepRanges(words: Word[], minSilenceSec: number): Array<{ from: number;
       from = words[i + 1].start - 0.05;
     }
   }
-  ranges.push({ from, to: words[words.length - 1].end + 0.4 });
+  ranges.push({ from, to: words[words.length - 1].end + 0.5 });
   return ranges;
 }
 
 /** Rimappa un tempo del video originale sul timeline tagliato. */
 function remap(t: number, ranges: Array<{ from: number; to: number }>): number {
-  let out = t;
+  // Somma la durata dei pezzi tenuti prima di t, più la parte del pezzo in cui cade t.
+  let out = 0;
   for (const r of ranges) {
-    if (t >= r.to) out -= r.to - r.from;
-    else break;
+    if (t >= r.to) out += r.to - r.from;
+    else {
+      if (t > r.from) out += t - r.from;
+      break;
+    }
   }
-  return Math.max(0, out);
-}
-
-/** Genera i sottotitoli .ass con la parola corrente evidenziata. */
-function buildAss(words: Word[], ranges: Array<{ from: number; to: number }>): string {
-  const head = `[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-WrapStyle: 2
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Social,Inter-Black,74,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,60,60,560,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
-  const lines: string[] = [];
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    const start = fmtTime(remap(w.start, ranges));
-    const end = fmtTime(remap(w.end, ranges));
-    // Finestra di 6 parole centrata sulla parola corrente, evidenziata in ambra.
-    const window = words.slice(Math.max(0, i - 2), i + 4);
-    const text = window
-      .map((x) => (x === w ? `{\\c&H2BD4FF&}${x.word}{\\c&HFFFFFF&}` : x.word))
-      .join(' ');
-    lines.push(`Dialogue: 0,${start},${end},Social,,0,0,0,,${text}`);
-  }
-  return `${head}\n${lines.join('\n')}\n`;
+  return out;
 }
 
 export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing', p: number, m?: string) => void): Promise<void> {
   const work = path.join(paths.tmp, job.jobId);
   await fs.mkdir(work, { recursive: true });
+
+  // Video senza traccia audio (es. microfono non attivo): niente trascrizione né taglio
+  // dei silenzi, ma il video si può comunque montare con testi e media.
+  const withAudio = await hasAudioStream(job.rawPath);
+  console.log(`[edit] ${job.jobId}: video ricevuto ${withAudio ? 'CON' : 'SENZA'} traccia audio`);
+  if (!withAudio) {
+    report('editing', 0.4, 'Il video non ha audio: lo preparo senza sottotitoli…');
+    const silentOut = path.join(work, 'clean.mp4');
+    await ff(
+      '-i', job.rawPath,
+      '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+      '-map', '0:v:0', '-map', '1:a', '-shortest',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac',
+      silentOut,
+    );
+    job.warning = 'Il video registrato non ha audio, quindi non ci sono sottotitoli né tagli dei silenzi. Controlla in Impostazioni › Expo Go che il Microfono sia attivo e riprova la registrazione.';
+    job.words = [];
+    await finish(job, silentOut, report);
+    return;
+  }
 
   report('transcribing', 0.05, 'Estrazione dell audio…');
   const audio = path.join(work, 'audio.wav');
@@ -99,9 +103,11 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const { words } = await transcribe(audio, job.language);
   if (words.length === 0) throw new AppError('Nessuna voce rilevata nel video: registra con il microfono più vicino.', 422);
 
-  // 1. Taglio dei silenzi basato sui timestamp delle parole.
-  report('editing', 0.5, 'Taglio dei silenzi…');
-  const ranges = keepRanges(words, Number(config.silenceMinMs) / 1000);
+  // 1. Taglio dei silenzi basato sui timestamp delle parole di Whisper (riconosce la voce, non i rumori):
+  // solo prima della prima parola e dopo l'ultima, le pause tra le frasi restano.
+  // Con CUT_PAUSES=1 nel .env si tagliano anche le pause lunghe in mezzo.
+  report('editing', 0.5, 'Taglio dei silenzi all inizio e alla fine…');
+  const ranges = keepRanges(words, config.cutPauses ? Number(config.silenceMinMs) / 1000 : Infinity);
   const select = ranges
     .map((r) => `between(t,${r.from.toFixed(3)},${r.to.toFixed(3)})`)
     .join('+');
@@ -117,8 +123,18 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   // 2. Pulizia audio + normalizzazione.
   report('editing', 0.65, 'Pulizia dell audio…');
   const cleanOut = path.join(work, 'clean.mp4');
-  await ff('-i', cutOut, '-af', 'afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'copy', cleanOut);
+  try {
+    await ff('-i', cutOut, '-af', `aresample=48000,arnndn=m='${rnnoiseModel()}',afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11`, '-c:v', 'copy', cleanOut);
+  } catch {
+    // FFmpeg senza arnndn o modello mancante: solo il filtro classico.
+    await ff('-i', cutOut, '-af', 'afftdn=nf=-25,loudnorm=I=-14:TP=-1.5:LRA=11', '-c:v', 'copy', cleanOut);
+  }
 
+  job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
+  await finish(job, cleanOut, report);
+}
+
+async function finish(job: Job, cleanOut: string, report: (s: 'transcribing' | 'editing', p: number, m?: string) => void): Promise<void> {
   // 3. Anteprima live: copiamo il video già tagliato e ripulito PRIMA di incollare
   // i sottotitoli. L'app lo riproduce e sovrappone i sottotitoli in tempo reale
   // usando la timeline delle parole rimappata sul video tagliato.
@@ -126,25 +142,13 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const previewPath = path.join(paths.videos, `${job.jobId}-preview.mp4`);
   await fs.copyFile(cleanOut, previewPath);
   job.previewUrl = `/media/${encodeURIComponent(job.jobId)}-preview.mp4`;
-  job.words = words.map((w) => ({ word: w.word, start: remap(w.start, ranges), end: remap(w.end, ranges) }));
 
-  // 4. Sottotitoli con parola evidenziata, incollati nel video.
+  // 4. Sottotitoli con parola evidenziata, incollati nel video (stesso export usato dalle modifiche).
+  // La sorgente delle modifiche è l'anteprima: resta in public/videos per 24 ore, tmp solo 2.
   report('editing', 0.8, 'Sottotitoli e export finale…');
-  const assPath = path.join(work, 'subs.ass');
-  await fs.writeFile(assPath, buildAss(words, ranges), 'utf8');
-
-  const finalPath = path.join(paths.videos, `${job.jobId}.mp4`);
-  await ff(
-    '-i', cleanOut,
-    '-vf', `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,ass='${assPath.replace(/\\/g, '/').replace(/'/g, "\\'")}'`,
-    '-r', '30',
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '160k',
-    '-movflags', '+faststart',
-    finalPath,
-  );
-
-  job.finalPath = finalPath;
+  job.sourcePath = previewPath;
+  job.duration = await probeDuration(previewPath);
+  await renderFinal(job, job.spec ?? defaultSpec());
   report('editing', 0.98, 'Fatto');
 }
 

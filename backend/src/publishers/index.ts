@@ -15,6 +15,15 @@ export interface PublishMeta {
   videoUrl: string;      // URL pubblico temporaneo del video montato
   filePath: string;      // percorso locale del file (per API che accettano upload diretto)
   language: string;
+  settings: PublishSettings;
+}
+
+/** Impostazioni scelte nell'app per ogni social (tutte facoltative). */
+export interface PublishSettings {
+  youtube?: { privacy?: 'public' | 'unlisted' | 'private'; madeForKids?: boolean; notifySubscribers?: boolean; category?: string };
+  instagram?: { shareToFeed?: boolean };
+  facebook?: { state?: 'PUBLISHED' | 'DRAFT' };
+  tiktok?: { disableComment?: boolean; disableDuet?: boolean; disableStitch?: boolean };
 }
 
 export interface PublishResult { url?: string; message?: string }
