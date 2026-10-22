@@ -62,18 +62,17 @@ export const specSchema = z.object({
   trimStart: z.number().min(0).default(0),
   trimEnd: z.number().min(0).default(0),
   subtitles: z.boolean().default(true),
-  // Aspetto dei sottotitoli: grandezza e altezza sullo schermo (sempre dentro la safe area).
+  // Grandezza dei sottotitoli: stanno sempre in basso, sopra l'interfaccia di TikTok e Instagram.
   subStyle: z.object({
     size: z.enum(['small', 'medium', 'large']).default('medium'),
-    position: z.enum(['low', 'middle', 'high']).default('low'),
-  }).default({ size: 'medium', position: 'low' }),
+  }).default({ size: 'medium' }),
   texts: z.array(textSchema).max(30).default([]),
   overlays: z.array(overlaySchema).max(20).default([]),
   stickers: z.array(stickerSchema).max(20).default([]),
 });
 
 export type EditSpec = z.infer<typeof specSchema>;
-export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, subStyle: { size: 'medium', position: 'low' }, texts: [], overlays: [], stickers: [] });
+export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, subStyle: { size: 'medium' }, texts: [], overlays: [], stickers: [] });
 
 /**
  * Safe area di TikTok/Reels/Shorts su 1080×1920: in basso ci sono descrizione e nome (~ultimi 480 px),
@@ -82,8 +81,8 @@ export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitle
  */
 export const SAFE = { left: 90, right: 180, top: 260, bottom: 560 } as const;
 export const SUB_SIZE = { small: 58, medium: 74, large: 92 } as const;
-/** Sottotitoli: allineamento ASS e margine verticale per ogni altezza. */
-export const SUB_POS = { low: { align: 2, marginV: SAFE.bottom }, middle: { align: 5, marginV: 0 }, high: { align: 8, marginV: 420 } } as const;
+/** Sottotitoli: sempre in basso (allineamento ASS 2), appena sopra la safe area. */
+export const SUB_POS = { align: 2, marginV: SAFE.bottom } as const;
 
 export interface MediaItem {
   id: string; kind: 'image' | 'video'; name: string; path: string; duration?: number;
@@ -161,8 +160,8 @@ const SIZE = { small: 56, medium: 72, large: 96 } as const;
 
 /** Sottotitoli karaoke + testi dell'utente in un unico file .ass (libass, niente font da configurare). */
 export function buildAss(words: Word[], spec: EditSpec, media: MediaItem[] = []): string {
-  const ss = spec.subStyle ?? { size: 'medium', position: 'low' };
-  const sp = SUB_POS[ss.position];
+  const ss = spec.subStyle ?? { size: 'medium' };
+  const sp = SUB_POS;
   const head = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080

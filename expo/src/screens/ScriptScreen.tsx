@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Mic, RefreshCw, Sparkles, Undo2 } from 'lucide-react-native';
+import { FolderOpen, Mic, RefreshCw, Sparkles, Undo2 } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import ScriptLoading from '../components/ScriptLoading';
 import { colors, radius } from '../theme';
@@ -8,10 +10,11 @@ import { generateScript, rewriteScript } from '../services/api';
 import { upsertProject } from '../services/history';
 import type { Project } from '../types';
 
-export default function ScriptScreen({ project, onBack, onRecord, update }: {
+export default function ScriptScreen({ project, onBack, onRecord, onUpload, update }: {
   project: Project;
   onBack: () => void;
   onRecord: (p: Project) => void;
+  onUpload: (p: Project, uri: string) => void;
   update: (p: Project) => void;
 }) {
   const [draft, setDraft] = useState(project);
@@ -30,6 +33,30 @@ export default function ScriptScreen({ project, onBack, onRecord, update }: {
     update(next);
     upsertProject(next);
   };
+
+  // Invece di registrare si può usare un video già pronto.
+  const fromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permesso negato', 'Consenti l\'accesso alle foto dalle Impostazioni per scegliere un video.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      quality: 1,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
+    if (!res.canceled && res.assets[0]) onUpload(draft, res.assets[0].uri);
+  };
+  const fromFiles = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
+    if (!res.canceled && res.assets[0]) onUpload(draft, res.assets[0].uri);
+  };
+  const upload = () => Alert.alert('Carica un video', 'Da dove lo prendi?', [
+    { text: 'Galleria', onPress: fromGallery },
+    { text: 'File', onPress: fromFiles },
+    { text: 'Annulla', style: 'cancel' },
+  ]);
 
   const regenerate = async () => {
     setRegenerating(true);
@@ -144,9 +171,10 @@ export default function ScriptScreen({ project, onBack, onRecord, update }: {
           />
         </Field>
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Btn label="Registra" icon={<Mic size={18} color="#0B0716" />} onPress={() => onRecord(draft)} />
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+          <Btn label="Carica video" variant="ghost" icon={<FolderOpen size={17} color={colors.text} />} onPress={upload} style={{ flex: 1 }} />
           <Btn label="Rigenera" variant="ghost" icon={<RefreshCw size={17} color={colors.text} />} onPress={regenerate} loading={regenerating} style={{ flex: 1 }} />
-          <Btn label="Registra" icon={<Mic size={18} color="#0B0716" />} onPress={() => onRecord(draft)} style={{ flex: 1.4 }} />
         </View>
       </ScrollView>
     </Screen>

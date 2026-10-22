@@ -131,6 +131,12 @@ export default function App() {
               return copy;
             })}
             onRecord={(p) => push({ name: 'record', project: p })}
+            onUpload={(p, uri) => {
+              // Video caricato dalla galleria o dai file: salta la registrazione.
+              const next = { ...p, rawVideoUri: uri };
+              upsertProject(next);
+              push({ name: 'review', project: next });
+            }}
           />
         )}
 
@@ -149,7 +155,8 @@ export default function App() {
         {current.name === 'review' && (
           <ReviewScreen
             project={current.project}
-            onBack={() => push({ name: 'record', project: current.project })}
+            // Video caricato: "Rifai" torna allo script per sceglierne un altro; registrato: si rifà la ripresa.
+            onBack={() => (stack[stack.length - 2]?.name === 'script' ? pop() : push({ name: 'record', project: current.project }))}
             onEdit={(p) => {
               setStack((s) => [...s.slice(0, -1), { name: 'edit', project: p }]);
             }}

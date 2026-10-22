@@ -19,7 +19,7 @@ const STICKER: Record<StickerKind, { label: string; bg: string }> = {
   link: { label: 'LINK IN BIO', bg: '#FF5CC8' },
 };
 const TEXT_SIZE = { small: 56, medium: 72, large: 96 } as const;
-// Come SAFE / SUB_SIZE / SUB_POS in backend/src/lib/render.ts: spazio lasciato all'interfaccia di TikTok e Instagram.
+// Come SAFE / SUB_SIZE in backend/src/lib/render.ts: spazio lasciato all'interfaccia di TikTok e Instagram.
 export const SAFE = { left: 90, right: 180, top: 260, bottom: 560 } as const;
 const SUB_SIZE = { small: 58, medium: 74, large: 92 } as const;
 
@@ -168,10 +168,8 @@ export default function LivePreview({ player, spec, words, media, duration, medi
       {w > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {sub && (() => {
-            const ss = spec.subStyle ?? { size: 'medium', position: 'low' };
-            const fs = SUB_SIZE[ss.size];
-            const place = ss.position === 'low' ? { bottom: SAFE.bottom * s }
-              : ss.position === 'high' ? { top: 420 * s } : { top: 0, bottom: 0, justifyContent: 'center' as const };
+            const fs = SUB_SIZE[(spec.subStyle ?? { size: 'medium' }).size];
+            const place = { bottom: SAFE.bottom * s };
             return (
             <View style={[styles.lineBox, { left: SAFE.left * s, right: SAFE.right * s }, place]}>
               <Text style={[styles.outline, { fontSize: fs * s, lineHeight: fs * 1.19 * s }]}>

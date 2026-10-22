@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Clock, Globe, Lightbulb, MonitorSmartphone, Smile, Sparkles } from 'lucide-react-native';
+import { ArrowRight, Clock, Globe, Lightbulb, PenLine, Smile, Sparkles } from 'lucide-react-native';
 import { Btn, ChipRow, Header, Screen } from '../components/ui';
 import ScriptLoading from '../components/ScriptLoading';
 import { colors, fonts } from '../theme';
@@ -13,7 +13,8 @@ const DURATIONS = [
   { value: '60', label: '60 s', hint: 'consigliato' },
   { value: '90', label: '90 s', hint: 'racconto' },
 ];
-const PLATFORMS = ['Reels', 'TikTok', 'YouTube Shorts', 'Tutti'];
+// Il video si può pubblicare ovunque: niente scelta della piattaforma.
+const PLATFORM = 'Tutti';
 const LANGUAGES = [
   { value: 'Italiano', label: '🇮🇹 Italiano' },
   { value: 'English', label: '🇬🇧 English' },
@@ -96,12 +97,36 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState(TONES[0] as string);
   const [duration, setDuration] = useState('60');
-  const [platform, setPlatform] = useState(PLATFORMS[0] as string);
   const [language, setLanguage] = useState(LANGUAGES[0].value);
+  const [mode, setMode] = useState<'ai' | 'manual'>('ai');
+  const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
-  const ready = topic.trim().length >= 5;
+  const manual = mode === 'manual';
+  const ready = manual ? text.trim().length >= 10 : topic.trim().length >= 5;
+
+  /** Testo scritto a mano: niente IA, si passa subito allo script. */
+  const useOwnText = async () => {
+    const script = text.trim();
+    const first = script.split(/\n/)[0].trim();
+    const title = first.length > 60 ? `${first.slice(0, 57).trim()}…` : first;
+    const project: Project = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      topic: title, tone,
+      duration: Number(duration) as TargetDuration,
+      platform: PLATFORM, language,
+      scriptResult: { script, title, hashtags: [] },
+      createdAt: Date.now(),
+    };
+    await save(project);
+    onScript(project);
+  };
 
   const submit = async () => {
+    if (manual) {
+      if (!ready) Alert.alert('Testo troppo corto', 'Scrivi il testo che vuoi leggere durante la registrazione.');
+      else await useOwnText();
+      return;
+    }
     if (!ready) {
       Alert.alert('Argomento troppo corto', 'Scrivi almeno una frase su cosa vuoi raccontare.');
       return;
@@ -111,13 +136,13 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
       const scriptResult: ScriptResult = await generateScript({
         topic: topic.trim(), tone,
         duration: Number(duration) as TargetDuration,
-        platform, language,
+        platform: PLATFORM, language,
       });
       const project: Project = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         topic: topic.trim(), tone,
         duration: Number(duration) as TargetDuration,
-        platform, language, scriptResult, createdAt: Date.now(),
+        platform: PLATFORM, language, scriptResult, createdAt: Date.now(),
       };
       await save(project);
       onScript(project);
@@ -139,6 +164,35 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
       <Header title="Nuovo video" subtitle="Scrivi l'idea, al resto pensa l'IA" onBack={onBack} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          {/* Script con l'IA o testo proprio */}
+          <View style={styles.modeRow}>
+            {([['ai', 'Script con l\'IA', Sparkles], ['manual', 'Scrivo io il testo', PenLine]] as const).map(([v, label, Icon]) => {
+              const on = mode === v;
+              return (
+                <Pressable key={v} onPress={() => setMode(v)} style={[styles.modeBtn, on && styles.modeOn]}>
+                  <Icon size={16} color={on ? colors.accent : colors.textDim} />
+                  <Text style={[styles.modeText, on && { color: colors.accent }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {manual ? (
+            <View style={[styles.ideaCard, text.length > 0 && { borderColor: colors.accent }]}>
+              <Text style={styles.ideaLabel}>Il tuo testo</Text>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="Scrivi qui quello che dirai nel video: lo vedrai scorrere mentre registri."
+                placeholderTextColor={colors.textDim}
+                maxLength={3000}
+                multiline
+                textAlignVertical="top"
+                style={[styles.ideaInput, { minHeight: 180 }]}
+              />
+              <Text style={styles.counter}>{text.length}/3000</Text>
+            </View>
+          ) : (<>
           {/* Idea */}
           <View style={[styles.ideaCard, topic.length > 0 && { borderColor: colors.accent }]}>
             <Text style={styles.ideaLabel}>Di cosa parla il video?</Text>
@@ -173,24 +227,11 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
             <DurationPicker value={duration} onChange={setDuration} />
           </Section>
 
-          {/* Piattaforma */}
-          <Section icon={<MonitorSmartphone size={16} color={colors.accent} />} title="Dove lo pubblichi">
-            <View style={styles.grid}>
-              {PLATFORMS.map((p) => {
-                const on = p === platform;
-                return (
-                  <Pressable key={p} onPress={() => setPlatform(p)} style={[styles.tile, on && styles.tileOn]}>
-                    <Text style={[styles.tileText, on && { color: colors.accent }]}>{p}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Section>
-
           {/* Tono */}
           <Section icon={<Smile size={16} color={colors.accent} />} title="Tono">
             <ChipRow options={TONES} value={tone} onChange={setTone} />
           </Section>
+          </>)}
 
           {/* Lingua */}
           <Section icon={<Globe size={16} color={colors.accent} />} title="Lingua">
@@ -205,14 +246,14 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
         {/* Barra fissa in basso */}
         <View style={styles.bottomBar}>
-          <Text style={styles.summary} numberOfLines={1}>{duration} s · {platform} · {tone}</Text>
+          {!manual && <Text style={styles.summary} numberOfLines={1}>{duration} s · {tone}</Text>}
           <Btn
-            label="Genera lo script"
-            icon={<Sparkles size={18} color={colors.onAccent} />}
+            label={manual ? 'Continua' : 'Genera lo script'}
+            icon={manual ? <ArrowRight size={18} color={colors.onAccent} /> : <Sparkles size={18} color={colors.onAccent} />}
             onPress={submit}
             disabled={!ready}
           />
-          <Text style={styles.privacy}>Script scritto con Gemini (piano gratuito): evita dati sensibili.</Text>
+          {!manual && <Text style={styles.privacy}>Script scritto con Gemini (piano gratuito): evita dati sensibili.</Text>}
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -246,13 +287,13 @@ const styles = StyleSheet.create({
   segCenter: { alignItems: 'center', justifyContent: 'center' },
   segLabel: { color: colors.text, fontFamily: fonts.display, fontSize: 16 },
   segHint: { color: colors.textDim, fontSize: 11, marginTop: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tile: {
-    width: '48.5%', height: 52, borderRadius: 14, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
+  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  modeBtn: {
+    flex: 1, height: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  tileOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  tileText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 14 },
+  modeOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  modeText: { color: colors.textDim, fontFamily: fonts.semibold, fontSize: 13.5 },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 8 },
   bottomBar: {
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8, gap: 8,

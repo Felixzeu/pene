@@ -65,7 +65,7 @@ export interface EditSpec {
   trimEnd: number;
   subtitles: boolean;
   /** Grandezza e altezza dei sottotitoli (sempre dentro la safe area dei social). */
-  subStyle?: { size: 'small' | 'medium' | 'large'; position: 'low' | 'middle' | 'high' };
+  subStyle?: { size: 'small' | 'medium' | 'large' };
   texts: TextItem[];
   overlays: OverlayItem[];
   stickers: StickerItem[];

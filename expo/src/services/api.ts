@@ -23,6 +23,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 60000): 
     return body as T;
   } catch (e) {
     if (e instanceof ApiError) throw e;
+    if (ctrl.signal.aborted) throw new ApiError('Il server ci sta mettendo troppo (l\'IA può essere lenta o senza quota): riprova tra un minuto.');
     throw new ApiError('Rete non raggiungibile: controlla la connessione e che il backend sia avviato.');
   } finally {
     clearTimeout(t);

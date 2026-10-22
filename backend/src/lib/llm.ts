@@ -87,8 +87,11 @@ function geminiModels(): string[] {
 
 async function geminiWithFallback(system: string, user: string, temperature: number): Promise<string> {
   let last: unknown;
+  // Al massimo ~75 secondi in tutto: l'app aspetta 2 minuti, meglio un errore chiaro che un timeout.
+  const deadline = Date.now() + 75_000;
   for (const model of geminiModels()) {
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (Date.now() > deadline) break;
       try {
         return await geminiCall(model, system, user, temperature);
       } catch (e) {
@@ -117,8 +120,12 @@ async function geminiCall(model: string, system: string, user: string, temperatu
         contents: [{ role: 'user', parts: [{ text: user }] }],
         generationConfig: { temperature, responseMimeType: 'application/json' },
       }),
+      signal: AbortSignal.timeout(40_000), // una singola risposta non deve bloccare tutto
     },
-  ).catch(() => { throw new AppError('Gemini non raggiungibile: controlla la connessione del backend.', 502); });
+  ).catch((e) => {
+    if (e?.name === 'TimeoutError') throw new AppError('Gemini non ha risposto in tempo.', 503);
+    throw new AppError('Gemini non raggiungibile: controlla la connessione del backend.', 502);
+  });
 
   if (res.status === 429) throw new AppError(ERR.quotaGemini, 429);
   if (res.status === 404) throw new AppError(`Modello Gemini ${model} non disponibile.`, 404);
@@ -198,15 +205,16 @@ Applica le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
 Formato della spec:
 {"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
  "subtitles": true|false,
- "subStyle": {"size": "small"|"medium"|"large", "position": "low"|"middle"|"high"},
+ "subStyle": {"size": "small"|"medium"|"large"},
  "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
  "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
                "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right",
                "cutout": true|false, "w": larghezza in px (120-1080, facoltativo), "x": px, "y": px (centro, facoltativi)}],
  "stickers": [{"id": string, "kind": "follow"|"like"|"subscribe"|"comment"|"share"|"link", "label": testo facoltativo, "start": s, "end": s, "position": "top"|"center"|"bottom"}]}
 Strumenti:
-- "subStyle" cambia i sottotitoli: "size" (rimpicciolisci = più piccolo, ingrandisci = più grande) e "position" (low = in basso,
-  middle = al centro, high = in alto). Quando li cambi, nel summary aggiungi che si possono regolare anche nella sezione "Sottotitoli".
+- "subStyle" cambia la grandezza dei sottotitoli: "size" (rimpicciolisci = più piccolo, ingrandisci = più grande).
+  Stanno sempre in basso, sopra l'interfaccia dei social: non si possono spostare (se l'utente lo chiede, mettilo nelle note).
+  Quando li cambi, nel summary aggiungi che si possono regolare anche nella sezione "Sottotitoli".
 - "stickers": non aggiungerne di nuovi (lascia invariati quelli che ci sono).
 - Se l'utente chiede un'immagine che NON è tra i media (es. "una foto della Torre Eiffel", "il logo di Instagram"),
   aggiungi un overlay con "search": "parole di ricerca brevi in inglese" al posto di "mediaId": il backend la scarica da internet.

@@ -15,7 +15,7 @@ import { upsertProject } from '../services/history';
 import type { EditSpec, Job, OverlayItem, Project, TextItem } from '../types';
 
 type SubStyle = NonNullable<EditSpec['subStyle']>;
-const SUB_DEFAULT: SubStyle = { size: 'medium', position: 'low' };
+const SUB_DEFAULT: SubStyle = { size: 'medium' };
 const EMPTY: EditSpec = { trimStart: 0, trimEnd: 0, subtitles: true, subStyle: SUB_DEFAULT, texts: [], overlays: [], stickers: [] };
 
 const POSITIONS = { Alto: 'top', Centro: 'center', Basso: 'bottom' } as const;
@@ -23,7 +23,6 @@ const SIZES = { Piccolo: 'small', Medio: 'medium', Grande: 'large' } as const;
 const MODES = { 'Schermo intero': 'full', Riquadro: 'pip' } as const;
 const PIP_POS = { 'Alto sx': 'top-left', 'Alto dx': 'top-right', Centro: 'center', 'Basso sx': 'bottom-left', 'Basso dx': 'bottom-right' } as const;
 const SUB_SIZES = { Piccoli: 'small', Medi: 'medium', Grandi: 'large' } as const;
-const SUB_POS = { 'In basso': 'low', 'Al centro': 'middle', 'In alto': 'high' } as const;
 const labelOf = <T extends string>(map: Record<string, T>, v: T) =>
   Object.keys(map).find((k) => map[k] === v) as string;
 
@@ -391,12 +390,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
                 value={labelOf(SUB_SIZES, (spec.subStyle ?? SUB_DEFAULT).size)}
                 onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), size: SUB_SIZES[v as keyof typeof SUB_SIZES] } }))}
               />
-              <Text style={styles.subLabel}>Posizione</Text>
-              <ChipRow
-                options={Object.keys(SUB_POS)}
-                value={labelOf(SUB_POS, (spec.subStyle ?? SUB_DEFAULT).position)}
-                onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), position: SUB_POS[v as keyof typeof SUB_POS] } }))}
-              />
+              <Text style={styles.hintSmall}>Stanno sempre in basso, sopra i tasti di TikTok e Instagram.</Text>
             </>
           )}
         </View>
@@ -450,6 +444,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border,
   },
   subLabel: { color: colors.textDim, fontSize: 12.5, marginTop: 12, marginBottom: 6 },
+  hintSmall: { color: colors.textDim, fontSize: 11.5, marginTop: 8 },
   noteBox: {
     flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12,
     backgroundColor: 'rgba(255,214,107,0.1)', borderRadius: radius.md, padding: 12,
