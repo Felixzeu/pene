@@ -39,7 +39,7 @@ export const publishRouter = Router();
 publishRouter.post('/', async (req, res, next) => {
   try {
     const body = schema.parse(req.body);
-    // L'app si chiama viral: #viral sempre presente, in testa e senza doppioni.
+    // #viralAPP sempre presente, in testa e senza doppioni.
     body.hashtags = normalizeHashtags(body.hashtags);
     body.title = cleanTitle(body.title, 100) || 'Nuovo video';
     const job = getJob(body.jobId);

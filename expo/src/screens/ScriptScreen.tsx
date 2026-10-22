@@ -159,19 +159,11 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
             disabled={!!rewriting || ask.trim().length < 2}
             style={[styles.askBtn, (ask.trim().length < 2 || !!rewriting) && { opacity: 0.4 }]}
           >
-            {rewriting === 'ask' ? <ActivityIndicator size="small" color="#0B0716" /> : <Sparkles size={18} color="#0B0716" />}
+            {rewriting === 'ask' ? <ActivityIndicator size="small" color={colors.onAccent} /> : <Sparkles size={18} color={colors.onAccent} />}
           </Pressable>
         </View>
 
-        <Field label="Hashtag">
-          <Input
-            value={sr.hashtags.join(' ')}
-            onChangeText={(t) => mutate({ scriptResult: { ...sr, hashtags: t.split(/\s+/).filter(Boolean) } })}
-            autoCapitalize="none"
-          />
-        </Field>
-
-        <Btn label="Registra" icon={<Mic size={18} color="#0B0716" />} onPress={() => onRecord(draft)} />
+        <Btn label="Registra" icon={<Mic size={18} color={colors.onAccent} />} onPress={() => onRecord(draft)} />
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
           <Btn label="Carica video" variant="ghost" icon={<FolderOpen size={17} color={colors.text} />} onPress={upload} style={{ flex: 1 }} />
           <Btn label="Rigenera" variant="ghost" icon={<RefreshCw size={17} color={colors.text} />} onPress={regenerate} loading={regenerating} style={{ flex: 1 }} />

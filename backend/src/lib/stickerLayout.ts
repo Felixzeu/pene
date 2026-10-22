@@ -6,7 +6,7 @@
 
 export interface LayoutSpec {
   subtitles: boolean;
-  texts: { start: number; end: number; position: 'top' | 'center' | 'bottom'; size: 'small' | 'medium' | 'large' }[];
+  texts: { start: number; end: number; position: 'top' | 'center' | 'bottom'; size: 'small' | 'medium' | 'large'; y?: number }[];
   overlays: LayoutOverlay[];
   stickers: { id: string; start: number; end: number; position: 'top' | 'center' | 'bottom' }[];
 }
@@ -53,7 +53,8 @@ export function layoutStickers(spec: LayoutSpec, aspectOf: (o: LayoutOverlay) =>
   if (spec.subtitles) fixed.push({ from: 1250, to: 1390, start: 0, end: Infinity });
   for (const t of spec.texts) {
     const h = TEXT_H[t.size];
-    const [from, to] = t.position === 'top' ? [260, 260 + h] : t.position === 'bottom' ? [1600 - h, 1600] : [960 - h / 2, 960 + h / 2];
+    const [from, to] = t.y != null ? [t.y - h / 2, t.y + h / 2]
+      : t.position === 'top' ? [260, 260 + h] : t.position === 'bottom' ? [1600 - h, 1600] : [960 - h / 2, 960 + h / 2];
     fixed.push({ from, to, start: t.start, end: t.end });
   }
   for (const o of spec.overlays) {

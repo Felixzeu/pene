@@ -6,6 +6,7 @@ import { Screen } from '../components/ui';
 import { colors, fonts, gradient } from '../theme';
 import { getWallet, linkedProviders, listServerVideos } from '../services/api';
 import { loadHistory, removeProject } from '../services/history';
+import { LANGUAGES, languageInfo, setLanguage, useLanguage } from '../services/language';
 import type { Project } from '../types';
 
 const STAGE_LABEL: Record<string, string> = {
@@ -105,6 +106,17 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
   const thisWeek = history.filter((p) => p.createdAt > weekAgo).length;
 
+  // Lingua dell'app: vale per script e sottotitoli di tutti i nuovi video.
+  const language = useLanguage();
+  const pickLanguage = () => Alert.alert(
+    'Lingua dei video',
+    'Script e sottotitoli dei nuovi video saranno in questa lingua. I progetti già creati non cambiano.',
+    [
+      ...LANGUAGES.map((l) => ({ text: `${l.flag} ${l.label}${l.value === language ? ' ✓' : ''}`, onPress: () => setLanguage(l.value) })),
+      { text: 'Annulla', style: 'cancel' as const },
+    ],
+  );
+
   const confirmDelete = (p: Project, reset: () => void) =>
     Alert.alert('Elimina progetto', `Vuoi eliminare "${p.scriptResult?.title || p.topic}"?`, [
       { text: 'Annulla', style: 'cancel', onPress: reset },
@@ -117,8 +129,11 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
   const header = (
     <View>
       <View style={styles.top}>
-        <Text style={styles.logo}>viral<Text style={{ color: colors.accent2 }}>.</Text></Text>
+        <Text style={styles.logo}>viral<Text style={{ color: colors.accent }}>.</Text></Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable onPress={pickLanguage} style={styles.coins} accessibilityLabel={`Lingua: ${language}`} hitSlop={6}>
+            <Text style={{ fontSize: 15 }}>{languageInfo(language).flag}</Text>
+          </Pressable>
           {coins !== undefined && (
             <Pressable onPress={onAccount} style={styles.coins} accessibilityLabel="I tuoi coin" hitSlop={6}>
               <Coins size={16} color={colors.warm} />
@@ -135,7 +150,7 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
           )}
         </View>
       </View>
-      <Text style={styles.heroTitle}>Fai il prossimo{'\n'}video <Text style={{ color: colors.accent2 }}>virale</Text>.</Text>
+      <Text style={styles.heroTitle}>Fai il prossimo{'\n'}video <Text style={{ color: colors.accent }}>virale</Text>.</Text>
 
       <Pressable onPress={onNew} style={({ pressed }) => [styles.newWrap, pressed && { transform: [{ scale: 0.98 }] }]}>
         <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.newCard}>

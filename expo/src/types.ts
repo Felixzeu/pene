@@ -34,6 +34,9 @@ export interface TextItem {
   end: number;
   position: 'top' | 'center' | 'bottom';
   size: 'small' | 'medium' | 'large';
+  x?: number; // centro scelto trascinando, px su 1080×1920 (al posto di position)
+  y?: number;
+  color?: string; // "#RRGGBB", bianco se manca
 }
 
 export interface OverlayItem {
@@ -64,8 +67,10 @@ export interface EditSpec {
   trimStart: number;
   trimEnd: number;
   subtitles: boolean;
-  /** Grandezza e altezza dei sottotitoli (sempre dentro la safe area dei social). */
-  subStyle?: { size: 'small' | 'medium' | 'large' };
+  /** Grandezza e colore dei sottotitoli (sempre in basso, dentro la safe area dei social). */
+  subStyle?: { size: 'small' | 'medium' | 'large'; color?: string };
+  /** Audio originale del video tolto. */
+  muted?: boolean;
   texts: TextItem[];
   overlays: OverlayItem[];
   stickers: StickerItem[];

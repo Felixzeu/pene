@@ -13,6 +13,9 @@ import { linkSocial } from '../services/social';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome, PublishSettings } from '../types';
 
+/** L'hashtag fisso dell'app, sempre primo (come BRAND_TAG nel backend). */
+const BRAND_TAG = 'viralAPP';
+
 // Pubblicazione sui social: ogni social è indipendente. Si collega l'account
 // una volta (OAuth nel browser), si scelgono i social e si pubblica; se uno
 // fallisce gli altri restano pubblicati e si può premere "Riprova" solo su quello.
@@ -25,7 +28,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
 }) {
   const [title, setTitle] = useState((project.scriptResult?.title ?? '').replace(/#\S+/g, '').replace(/\s+/g, ' ').trim());
   const [description, setDescription] = useState('');
-  // #viral è fisso (non si può togliere): nel campo ci sono solo gli altri hashtag.
+  // #viralAPP è fisso (non si può togliere): nel campo ci sono solo gli altri hashtag.
   const [hashtags, setHashtags] = useState(cleanTags(project.scriptResult?.hashtags ?? []).map((h) => `#${h}`).join(' '));
   const [selected, setSelected] = useState<ProviderId[]>(['youtube']);
   const [busy, setBusy] = useState<ProviderId[]>([]);
@@ -86,7 +89,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         providers,
         title: title.trim().slice(0, 100),
         description: description.trim(),
-        hashtags: ['viral', ...cleanTags(hashtags)].slice(0, 15),
+        hashtags: [BRAND_TAG, ...cleanTags(hashtags)].slice(0, 15),
         settings,
       });
       // Unisce i nuovi esiti a quelli precedenti (un "Riprova" sostituisce solo il suo social).
@@ -154,9 +157,9 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         <Field label="Descrizione" hint="Facoltativa. Gli hashtag vengono aggiunti in automatico.">
           <TextArea value={description} onChangeText={setDescription} maxLength={2200} placeholder="Racconta il video in due righe" />
         </Field>
-        <Field label="Hashtag" hint="#viral c'è sempre. Aggiungi gli altri separati da spazio.">
+        <Field label="Hashtag" hint="#viralAPP c'è sempre. Aggiungi gli altri separati da spazio.">
           <View style={styles.tagRow}>
-            <View style={styles.tagLocked}><Text style={styles.tagLockedText}>#viral</Text></View>
+            <View style={styles.tagLocked}><Text style={styles.tagLockedText}>#{BRAND_TAG}</Text></View>
             <Input
               value={hashtags}
               onChangeText={setHashtags}
@@ -168,6 +171,14 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
             />
           </View>
         </Field>
+
+        {/* Come apparirà sotto il video: testo e hashtag insieme. */}
+        <View style={styles.captionBox}>
+          <Text style={styles.captionLabel}>Anteprima della didascalia</Text>
+          {!!title.trim() && <Text style={styles.captionTitle}>{title.trim()}</Text>}
+          {!!description.trim() && <Text style={styles.captionText}>{description.trim()}</Text>}
+          <Text style={styles.captionTags}>{[BRAND_TAG, ...cleanTags(hashtags)].slice(0, 15).map((h) => `#${h}`).join(' ')}</Text>
+        </View>
 
         <Text style={styles.section}>Social</Text>
         <View style={styles.card}>
@@ -237,7 +248,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
           <Btn
             label={pending.length ? `Pubblica (${pending.length})` : 'Pubblicato'}
-            icon={<Send size={17} color="#0B0716" />}
+            icon={<Send size={17} color={colors.onAccent} />}
             onPress={() => publish(pending)}
             loading={busy.length > 0}
             disabled={pending.length === 0 || !project.jobId}
@@ -249,13 +260,13 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   );
 }
 
-// Hashtag puliti: niente #, spazi o simboli, minuscoli, senza doppioni e senza "viral" (è già fisso).
+// Hashtag puliti: niente #, spazi o simboli, minuscoli, senza doppioni e senza "viralapp" (è già fisso).
 function cleanTags(input: string[] | string): string[] {
   const parts = Array.isArray(input) ? input.flatMap((h) => h.split(/[\s,#]+/)) : input.split(/[\s,#]+/);
   const out: string[] = [];
   for (const p of parts) {
     const t = p.normalize('NFKC').replace(/[^0-9a-zA-Z\u00C0-\u024F_]/g, '').toLowerCase().slice(0, 30);
-    if (t.length < 2 || t === 'viral' || out.includes(t)) continue;
+    if (t.length < 2 || t === 'viral' || t === BRAND_TAG.toLowerCase() || out.includes(t)) continue;
     out.push(t);
   }
   return out.slice(0, 14);
@@ -268,6 +279,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tagLockedText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  captionBox: {
+    backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
+    padding: 14, gap: 6, marginTop: 4,
+  },
+  captionLabel: { color: colors.textDim, fontSize: 11.5, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase' },
+  captionTitle: { color: colors.text, fontSize: 14.5, fontWeight: '700' },
+  captionText: { color: colors.text, fontSize: 13.5, lineHeight: 19 },
+  captionTags: { color: colors.accent, fontSize: 13.5, fontWeight: '600', lineHeight: 19 },
   playerWrap: {
     borderRadius: 22, overflow: 'hidden', backgroundColor: '#000',
     aspectRatio: 9 / 16, maxHeight: 360, alignSelf: 'center', width: '60%', marginBottom: 14,

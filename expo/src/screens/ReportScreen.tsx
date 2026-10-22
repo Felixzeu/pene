@@ -71,7 +71,7 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
         <Field label="Contatto" hint="Facoltativo: email o Discord, se vuoi una risposta.">
           <Input value={contact} onChangeText={setContact} autoCapitalize="none" placeholder="tu@email.it" style={{ height: 50 }} />
         </Field>
-        <Btn label="Invia" icon={<Send size={17} color="#0B0716" />} onPress={send} loading={sending} style={{ marginTop: 8 }} />
+        <Btn label="Invia" icon={<Send size={17} color={colors.onAccent} />} onPress={send} loading={sending} style={{ marginTop: 8 }} />
       </ScrollView>
     </Screen>
   );

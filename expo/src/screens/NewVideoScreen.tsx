@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ArrowRight, Clock, Globe, Lightbulb, PenLine, Smile, Sparkles } from 'lucide-react-native';
+import { ArrowRight, Clock, Lightbulb, PenLine, Smile, Sparkles } from 'lucide-react-native';
 import { Btn, ChipRow, Header, Screen } from '../components/ui';
 import ScriptLoading from '../components/ScriptLoading';
 import { colors, fonts } from '../theme';
 import { generateScript } from '../services/api';
+import { languageInfo, useLanguage } from '../services/language';
 import type { Project, ScriptResult, TargetDuration } from '../types';
 
 const TONES = ['Energico', 'Professionale', 'Divertente', 'Ispiratore', 'Educativo'];
@@ -15,12 +16,6 @@ const DURATIONS = [
 ];
 // Il video si può pubblicare ovunque: niente scelta della piattaforma.
 const PLATFORM = 'Tutti';
-const LANGUAGES = [
-  { value: 'Italiano', label: '🇮🇹 Italiano' },
-  { value: 'English', label: '🇬🇧 English' },
-  { value: 'Español', label: '🇪🇸 Español' },
-  { value: 'Français', label: '🇫🇷 Français' },
-];
 const IDEAS = [
   '3 errori che fanno tutti quando iniziano a investire',
   'Il posto più bello della mia città che nessuno conosce',
@@ -97,7 +92,8 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState(TONES[0] as string);
   const [duration, setDuration] = useState('60');
-  const [language, setLanguage] = useState(LANGUAGES[0].value);
+  // La lingua si sceglie una volta sola nella Home.
+  const language = useLanguage();
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -233,20 +229,11 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
           </Section>
           </>)}
 
-          {/* Lingua */}
-          <Section icon={<Globe size={16} color={colors.accent} />} title="Lingua">
-            <ChipRow
-              options={LANGUAGES.map((l) => l.label)}
-              value={LANGUAGES.find((l) => l.value === language)?.label ?? ''}
-              onChange={(v) => setLanguage(LANGUAGES.find((l) => l.label === v)?.value ?? 'Italiano')}
-            />
-            <Text style={styles.hint}>Vale per lo script e per i sottotitoli.</Text>
-          </Section>
         </ScrollView>
 
         {/* Barra fissa in basso */}
         <View style={styles.bottomBar}>
-          {!manual && <Text style={styles.summary} numberOfLines={1}>{duration} s · {tone}</Text>}
+          <Text style={styles.summary} numberOfLines={1}>{manual ? '' : `${duration} s · ${tone} · `}{languageInfo(language).flag} {language}</Text>
           <Btn
             label={manual ? 'Continua' : 'Genera lo script'}
             icon={manual ? <ArrowRight size={18} color={colors.onAccent} /> : <Sparkles size={18} color={colors.onAccent} />}

@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0B0A0E",
+    "backgroundColor": "#121212",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -24,7 +24,7 @@
         "INTERNET"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0B0A0E",
+        "backgroundColor": "#121212",
         "foregroundImage": "./assets/icon.png"
       }
     },

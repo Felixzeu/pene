@@ -43,7 +43,7 @@ export default function AuthScreen() {
     <Screen>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-          <Text style={styles.logo}>viral<Text style={{ color: colors.accent2 }}>.</Text></Text>
+          <Text style={styles.logo}>viral<Text style={{ color: colors.accent }}>.</Text></Text>
           <Text style={styles.title}>{mode === 'login' ? 'Bentornato.' : 'Crea il tuo account.'}</Text>
           <Text style={styles.sub}>
             {mode === 'login' ? 'Accedi per ritrovare i tuoi video e i social collegati.' : 'Gratis. Ti servono solo email e password.'}

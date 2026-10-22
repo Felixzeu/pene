@@ -79,7 +79,7 @@ export function Btn({ label, onPress, variant = 'primary', loading, disabled, ic
 
 const variants: Record<BtnVariant, { btn: ViewStyle; label: TextStyle }> = {
   primary: { btn: { paddingHorizontal: 0 }, label: { color: colors.onAccent } },
-  warm: { btn: { backgroundColor: colors.warm }, label: { color: colors.onAccent } },
+  warm: { btn: { backgroundColor: colors.warm }, label: { color: colors.onWarm } },
   ghost: { btn: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border }, label: { color: colors.text } },
   danger: { btn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.err }, label: { color: colors.err } },
 };

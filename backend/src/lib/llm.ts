@@ -19,7 +19,7 @@ Regole:
 - Struttura: hook, corpo (2-4 punti concreti), call to action finale.
 - Durata target indicata in secondi: circa 150 parole al minuto.
 - Il titolo è max 70 caratteri, nella lingua di output, accattivante, senza hashtag, senza emoji e senza virgolette.
-- Gli hashtag sono 5-8, pertinenti all'argomento, nella lingua di output (più 1-2 in inglese se molto usati), minuscoli, senza "#", senza spazi né punteggiatura. Non includere "viral": viene aggiunto in automatico.
+- Gli hashtag sono 5-8, pertinenti all'argomento, nella lingua di output (più 1-2 in inglese se molto usati), minuscoli, senza "#", senza spazi né punteggiatura. Non includere "viral" né "viralapp": #viralAPP viene aggiunto in automatico.
 - Se non puoi scrivere lo script per l'argomento richiesto, rispondi SOLO con {"error": "motivo breve"}.`;
 
 function buildPrompt(p: { topic: string; tone: string; duration: number; platform: string; language: string }) {
@@ -205,8 +205,10 @@ Applica le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
 Formato della spec:
 {"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
  "subtitles": true|false,
- "subStyle": {"size": "small"|"medium"|"large"},
- "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large"}],
+ "subStyle": {"size": "small"|"medium"|"large", "color": "#RRGGBB" facoltativo},
+ "muted": true|false (true = audio originale del video tolto),
+ "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large",
+            "color": "#RRGGBB" facoltativo, "x": px, "y": px (centro, facoltativi: se ci sono valgono al posto di "position")}],
  "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
                "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right",
                "cutout": true|false, "w": larghezza in px (120-1080, facoltativo), "x": px, "y": px (centro, facoltativi)}],
@@ -214,6 +216,8 @@ Formato della spec:
 Strumenti:
 - "subStyle" cambia la grandezza dei sottotitoli: "size" (rimpicciolisci = più piccolo, ingrandisci = più grande).
   Stanno sempre in basso, sopra l'interfaccia dei social: non si possono spostare (se l'utente lo chiede, mettilo nelle note).
+  "color" cambia il colore di sottotitoli o testi (es. rosso #FF2D2D, giallo #FFD42B, nero #000000, bianco #FFFFFF).
+  "muted": metti true solo se l'utente chiede di togliere l'audio/silenziare il video.
   Quando li cambi, nel summary aggiungi che si possono regolare anche nella sezione "Sottotitoli".
 - "stickers": non aggiungerne di nuovi (lascia invariati quelli che ci sono).
 - Se l'utente chiede un'immagine che NON è tra i media (es. "una foto della Torre Eiffel", "il logo di Instagram"),

@@ -44,7 +44,8 @@ function rnnoiseModel(): string {
 function keepRanges(words: Word[], minSilenceSec: number): Array<{ from: number; to: number }> {
   const ranges: Array<{ from: number; to: number }> = [];
   if (words.length === 0) return [{ from: 0, to: Number.MAX_SAFE_INTEGER }];
-  let from = Math.max(0, words[0].start - 0.25);
+  // Un piccolo margine prima della prima parola e dopo l'ultima, per non tagliare la voce.
+  let from = Math.max(0, words[0].start - 0.3);
   for (let i = 0; i < words.length - 1; i++) {
     const gap = words[i + 1].start - words[i].end;
     if (gap > minSilenceSec) {
@@ -52,7 +53,7 @@ function keepRanges(words: Word[], minSilenceSec: number): Array<{ from: number;
       from = words[i + 1].start - 0.05;
     }
   }
-  ranges.push({ from, to: words[words.length - 1].end + 0.4 });
+  ranges.push({ from, to: words[words.length - 1].end + 0.5 });
   return ranges;
 }
 
@@ -102,9 +103,11 @@ export async function editVideo(job: Job, report: (s: 'transcribing' | 'editing'
   const { words } = await transcribe(audio, job.language);
   if (words.length === 0) throw new AppError('Nessuna voce rilevata nel video: registra con il microfono più vicino.', 422);
 
-  // 1. Taglio dei silenzi basato sui timestamp delle parole.
-  report('editing', 0.5, 'Taglio dei silenzi…');
-  const ranges = keepRanges(words, Number(config.silenceMinMs) / 1000);
+  // 1. Taglio dei silenzi basato sui timestamp delle parole di Whisper (riconosce la voce, non i rumori):
+  // solo prima della prima parola e dopo l'ultima, le pause tra le frasi restano.
+  // Con CUT_PAUSES=1 nel .env si tagliano anche le pause lunghe in mezzo.
+  report('editing', 0.5, 'Taglio dei silenzi all inizio e alla fine…');
+  const ranges = keepRanges(words, config.cutPauses ? Number(config.silenceMinMs) / 1000 : Infinity);
   const select = ranges
     .map((r) => `between(t,${r.from.toFixed(3)},${r.to.toFixed(3)})`)
     .join('+');

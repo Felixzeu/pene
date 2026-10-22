@@ -1,20 +1,21 @@
-// Tema "Neon": quasi nero con riflessi viola, rosa e viola come accenti (in gradiente
-// sui pulsanti principali), titoli in Space Grotesk.
+// Tema ViralAPP: rosso come colore del brand su sfondo quasi nero, titoli in Space Grotesk.
+// Tutti i colori dell'app passano da qui: per cambiare palette basta modificare questi valori.
 export const colors = {
-  bg: '#07060D',
-  surface: '#110F1D',
-  surfaceAlt: '#1A1730',
-  border: '#2A2540',
-  text: '#F4F1FF',
-  textDim: '#A59DC4',
-  accent: '#FF5CC8',
-  accent2: '#A15CFF',
-  accentSoft: 'rgba(255,92,200,0.14)',
+  bg: '#121212',          // sfondo principale
+  surface: '#1E1E1E',     // card e pannelli
+  surfaceAlt: '#2A2A2A',  // campi, pulsanti secondari
+  border: '#343434',
+  text: '#FFFFFF',
+  textDim: '#B3B3B3',
+  accent: '#FF2D2D',      // rosso principale: pulsanti, selezioni, link, azioni importanti
+  accent2: '#C1121F',     // rosso scuro: stati attivi, gradienti, dettagli
+  accentSoft: 'rgba(255,45,45,0.14)',
   warm: '#FFD66B',
-  ok: '#7CFFCB',
-  err: '#FF6B8B',
-  onAccent: '#0B0716', // testo sopra rosa/viola/giallo
-} as const;
+  ok: '#5BE49B',
+  err: '#FF8A5C',         // arancio: distinto dal rosso del brand
+  onAccent: '#FFFFFF',    // testo sopra il rosso
+  onWarm: '#121212',      // testo sopra il giallo
+} as const
 
 /** Gradiente dei pulsanti principali e delle card in evidenza. */
 export const gradient = [colors.accent, colors.accent2] as const;

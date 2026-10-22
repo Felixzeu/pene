@@ -16,6 +16,7 @@ export const config = {
   whisperModel: process.env.WHISPER_MODEL ?? '/models/ggml-base.bin',
   silenceThresholdDb: process.env.SILENCE_THRESHOLD_DB ?? '-38dB',
   silenceMinMs: process.env.SILENCE_MIN_MS ?? '700',
+  cutPauses: process.env.CUT_PAUSES === '1',
   encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? '',
   // Account utenti (Supabase). Senza SUPABASE_URL l'app resta "monoutente" come prima.
   supabase: {

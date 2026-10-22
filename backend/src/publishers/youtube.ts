@@ -1,4 +1,4 @@
-import { hashtagLine } from '../lib/tags';
+import { BRAND_TAG, hashtagLine } from '../lib/tags';
 import { AppError, ERR } from '../lib/errors';
 import { freshAccessToken } from '../lib/tokens';
 import type { PublishMeta, PublishResult } from './index';
@@ -34,7 +34,7 @@ export const youtubePublish = async (meta: PublishMeta): Promise<PublishResult> 
       },
       body: JSON.stringify({
         snippet: {
-          title: `${meta.title.slice(0, 93)} #viral`, // #viral sempre, anche nel titolo
+          title: `${meta.title.slice(0, 89)} #${BRAND_TAG}`, // #viralAPP sempre, anche nel titolo
           description: [meta.description, `${hashtagLine(meta.hashtags)} #shorts`].filter(Boolean).join('\n\n'),
           categoryId: yt.category ?? '22',
         },

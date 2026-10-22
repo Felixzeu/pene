@@ -70,16 +70,18 @@ export function VideoTimeline({ duration, trimStart, trimEnd, time, onSeek, onTr
             <View pointerEvents="none" style={[styles.cut, { left: 0, width: px(trimStart) }]} />
             <View pointerEvents="none" style={[styles.cut, { right: 0, width: px(trimEnd) }]} />
             <View pointerEvents="none" style={[styles.kept, { left: px(trimStart), width: Math.max(0, px(end) - px(trimStart)) }]} />
-            <View style={[styles.head, { left: px(clamp(time, 0, total)) - 1 }]} pointerEvents="none" />
-            <View {...left} style={[styles.handle, { left: px(trimStart) - 14 }]}><View style={styles.grip} /></View>
-            <View {...right} style={[styles.handle, { left: px(end) - 14 }]}><View style={styles.grip} /></View>
+            <View style={[styles.head, { left: px(clamp(time, 0, total)) - 1 }]} pointerEvents="none">
+              <View style={styles.knob} />
+            </View>
+            <View {...left} style={[styles.handle, { left: px(trimStart) - 14 }]}><View style={[styles.grip, styles.gripL]}><View style={styles.gripLine} /></View></View>
+            <View {...right} style={[styles.handle, { left: px(end) - 14 }]}><View style={[styles.grip, styles.gripR]}><View style={styles.gripLine} /></View></View>
           </>
         )}
       </View>
       <View style={styles.labels}>
-        <Text style={styles.label}>{trimStart > 0 ? `taglio ${r1(trimStart)}s` : fmt(0)}</Text>
-        <Text style={[styles.label, { color: colors.text }]}>{fmt(Math.max(0, time - trimStart))} / {fmt(end - trimStart)}</Text>
-        <Text style={styles.label}>{trimEnd > 0 ? `taglio ${r1(trimEnd)}s` : fmt(total)}</Text>
+        <Text style={styles.label}>{trimStart > 0 ? `✂ ${r1(trimStart)}s` : fmt(0)}</Text>
+        <Text style={styles.label}>trascina le maniglie per tagliare</Text>
+        <Text style={styles.label}>{trimEnd > 0 ? `✂ ${r1(trimEnd)}s` : fmt(total)}</Text>
       </View>
     </View>
   );
@@ -140,13 +142,18 @@ export function RangeBar({ total, start, end, onChange, onDrag, color = colors.a
 }
 
 const styles = StyleSheet.create({
-  track: { height: 46, borderRadius: 10, backgroundColor: colors.surfaceAlt, overflow: 'visible', justifyContent: 'center' },
+  track: { height: 44, borderRadius: 12, backgroundColor: colors.surfaceAlt, overflow: 'visible', justifyContent: 'center', marginTop: 6 },
   kept: { position: 'absolute', top: 0, bottom: 0, backgroundColor: colors.accentSoft, borderTopWidth: 2, borderBottomWidth: 2, borderColor: colors.accent },
-  cut: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
-  head: { position: 'absolute', top: -4, bottom: -4, width: 3, borderRadius: 2, backgroundColor: '#fff' },
+  cut: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12 },
+  // Testina: linea bianca con un pallino in cima.
+  head: { position: 'absolute', top: -6, bottom: -2, width: 2, borderRadius: 1, backgroundColor: '#fff', alignItems: 'center' },
+  knob: { position: 'absolute', top: -5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.accent },
   handle: { position: 'absolute', top: 0, bottom: 0, width: 28, alignItems: 'center', justifyContent: 'center' },
-  grip: { width: 10, height: 34, borderRadius: 5, backgroundColor: colors.accent },
-  labels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  grip: { width: 14, height: 44, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  gripL: { borderTopLeftRadius: 10, borderBottomLeftRadius: 10, marginLeft: 14 },
+  gripR: { borderTopRightRadius: 10, borderBottomRightRadius: 10, marginRight: 14 },
+  gripLine: { width: 2, height: 16, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.85)' },
+  labels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   label: { color: colors.textDim, fontSize: 11.5 },
   rangeTrack: { height: 34, borderRadius: 8, backgroundColor: colors.surfaceAlt },
   block: { position: 'absolute', top: 0, bottom: 0, borderRadius: 8, opacity: 0.9 },

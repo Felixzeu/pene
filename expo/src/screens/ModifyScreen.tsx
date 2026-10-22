@@ -3,11 +3,13 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  AlertTriangle, CheckCircle2, Eye, ImagePlus, Info, Minus, Move, Pause, Play, Plus, Sparkles, Trash2, Type as TypeIcon, Wand2,
+  AlertTriangle, Check, CheckCircle2, Eye, ImagePlus, Info, Minus, Move, Pause, Play, Plus, Sparkles, Trash2, Type as TypeIcon,
+  Volume2, VolumeX, Wand2,
 } from 'lucide-react-native';
 import { Badge, Btn, ChipRow, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
-import { RangeBar, VideoTimeline } from '../components/Timeline';
-import { colors, radius } from '../theme';
+import { RangeBar, VideoTimeline, fmt } from '../components/Timeline';
+import { TEXT_COLORS } from '../lib/textColors';
+import { colors, fonts, radius } from '../theme';
 import { aiEdit, getJob, jobMediaSource, renderEdit, uploadMedia } from '../services/api';
 import LivePreview, { overlayLook } from '../components/LivePreview';
 import { overlayBox } from '../lib/stickerLayout';
@@ -27,6 +29,35 @@ const labelOf = <T extends string>(map: Record<string, T>, v: T) =>
   Object.keys(map).find((k) => map[k] === v) as string;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Palette di colori: un tocco e si vede subito nell'anteprima. */
+function ColorPicker({ value, onChange }: { value?: string; onChange: (hex: string) => void }) {
+  const cur = (value ?? '#FFFFFF').toUpperCase();
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colors}>
+      {TEXT_COLORS.map((c) => {
+        const on = c.hex === cur;
+        return (
+          <Pressable key={c.hex} onPress={() => onChange(c.hex)} hitSlop={4} accessibilityLabel={c.name} style={[styles.swatchRing, on && { borderColor: colors.accent }]}>
+            <View style={[styles.swatch, { backgroundColor: c.hex }]}>
+              {on && <Check size={14} color={c.hex === '#FFFFFF' || c.hex === '#FFD42B' ? '#000' : '#fff'} />}
+            </View>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** Tasto "Sposta" / "Fatto": blocca l'anteprima sull'elemento per trascinarlo. */
+function MoveButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.moveBtn, on && styles.moveBtnOn, pressed && { opacity: 0.8 }]}>
+      {on ? <Check size={15} color={colors.onAccent} /> : <Move size={15} color={colors.text} />}
+      <Text style={[styles.moveText, on && { color: colors.onAccent }]}>{on ? 'Fatto' : 'Sposta'}</Text>
+    </Pressable>
+  );
+}
 const newId = (p: string) => `${p}${Date.now().toString(36).slice(-5)}`;
 
 // Modifiche dopo il primo montaggio: testi a schermo, foto/video della galleria, sottotitoli,
@@ -50,6 +81,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const [error, setError] = useState<string | null>(null);
   const stopRef = useRef(false);
   const [moving, setMoving] = useState<string | null>(null); // foto che si sta spostando a mano
+  const [movingText, setMovingText] = useState<string | null>(null); // testo che si sta spostando a mano
   const [dragging, setDragging] = useState(false);
 
   const previewSrc = job?.previewUrl ?? null;
@@ -63,8 +95,10 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   }, [previewPlayer]);
   const seek = (t: number) => { previewPlayer.pause(); setPlaying(false); previewPlayer.currentTime = t; setTime(t); };
   const togglePlay = () => {
-    if (playing) { previewPlayer.pause(); setPlaying(false); } else { setMoving(null); previewPlayer.play(); setPlaying(true); }
+    if (playing) { previewPlayer.pause(); setPlaying(false); } else { setMoving(null); setMovingText(null); previewPlayer.play(); setPlaying(true); }
   };
+  // Audio originale: si sente (o no) già nell'anteprima, e così sarà nel video finale.
+  useEffect(() => { previewPlayer.muted = !!spec.muted; }, [previewPlayer, spec.muted]);
 
   // Stato iniziale dal backend (spec attuale e media già caricati).
   useEffect(() => {
@@ -92,7 +126,16 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     previewPlayer.pause();
     setPlaying(false);
     previewPlayer.currentTime = spec.trimStart + o.start + Math.min(0.3, (o.end - o.start) / 2);
+    setMovingText(null);
     setMoving(o.id);
+  };
+  const toggleMoveText = (t: TextItem) => {
+    if (movingText === t.id) { setMovingText(null); previewPlayer.play(); setPlaying(true); return; }
+    previewPlayer.pause();
+    setPlaying(false);
+    previewPlayer.currentTime = spec.trimStart + t.start + Math.min(0.3, (t.end - t.start) / 2);
+    setMoving(null);
+    setMovingText(t.id);
   };
   const resize = (o: OverlayItem, factor: number) => {
     const m = job?.media?.find((x) => x.id === o.mediaId);
@@ -165,6 +208,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const render = async (next: EditSpec) => {
     setError(null);
     setMoving(null);
+    setMovingText(null);
     setRendering(true);
     try {
       await renderEdit(jobId, { ...next, texts: next.texts.filter((t) => t.text.trim()) });
@@ -225,26 +269,49 @@ export default function ModifyScreen({ project, onBack, onDone }: {
             mediaUri={(id, cut) => jobMediaSource(jobId, id, cut)}
             selectedId={moving}
             onMoveOverlay={(id, x, y, w) => patchOverlay(id, { x, y, w })}
+            selectedTextId={movingText}
+            onMoveText={(id, x, y) => patchText(id, { x, y })}
             onDrag={setDragging}
           />
         ) : null}
         {/* Timeline: scorri il video e trascina le maniglie rosa per tagliare inizio e fine. */}
         {job?.duration ? (
-          <View style={styles.timelineRow}>
-            <Pressable onPress={togglePlay} style={styles.playBtn} hitSlop={6}>
-              {playing ? <Pause size={18} color={colors.text} /> : <Play size={18} color={colors.text} />}
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <VideoTimeline
-                duration={job.duration}
-                trimStart={spec.trimStart}
-                trimEnd={spec.trimEnd}
-                time={time}
-                onSeek={seek}
-                onTrim={(p) => setSpec((s) => ({ ...s, ...p }))}
-                onDrag={setDragging}
-              />
+          <View style={styles.player}>
+            <View style={styles.playerRow}>
+              <Pressable
+                onPress={togglePlay}
+                hitSlop={6}
+                accessibilityLabel={playing ? 'Pausa' : 'Riproduci'}
+                style={({ pressed }) => [styles.playBtn, pressed && { transform: [{ scale: 0.94 }] }]}
+              >
+                {playing
+                  ? <Pause size={20} color={colors.onAccent} fill={colors.onAccent} />
+                  : <Play size={20} color={colors.onAccent} fill={colors.onAccent} style={{ marginLeft: 2 }} />}
+              </Pressable>
+              <Text style={styles.playerTime}>
+                {fmt(Math.max(0, time - spec.trimStart))}
+                <Text style={{ color: colors.textDim }}> / {fmt(finalLen)}</Text>
+              </Text>
+              <View style={{ flex: 1 }} />
+              <Pressable
+                onPress={() => setSpec((s) => ({ ...s, muted: !s.muted }))}
+                hitSlop={6}
+                accessibilityLabel={spec.muted ? 'Riattiva audio' : 'Togli audio'}
+                style={[styles.muteBtn, spec.muted && styles.muteOn]}
+              >
+                {spec.muted ? <VolumeX size={17} color={colors.accent} /> : <Volume2 size={17} color={colors.text} />}
+                <Text style={[styles.muteText, spec.muted && { color: colors.accent }]}>{spec.muted ? 'Audio tolto' : 'Audio'}</Text>
+              </Pressable>
             </View>
+            <VideoTimeline
+              duration={job.duration}
+              trimStart={spec.trimStart}
+              trimEnd={spec.trimEnd}
+              time={time}
+              onSeek={seek}
+              onTrim={(p) => setSpec((s) => ({ ...s, ...p }))}
+              onDrag={setDragging}
+            />
           </View>
         ) : null}
         <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -290,7 +357,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         <Btn
           label="Applica con l'IA"
           variant="warm"
-          icon={<Sparkles size={17} color="#0B0716" />}
+          icon={<Sparkles size={17} color={colors.onWarm} />}
           onPress={askAi}
           loading={aiBusy}
           disabled={busy || instruction.trim().length < 3}
@@ -315,9 +382,20 @@ export default function ModifyScreen({ project, onBack, onDone }: {
               </Pressable>
             </View>
             <RangeBar total={finalLen} start={t.start} end={t.end} onChange={(p) => patchText(t.id, p)} onDrag={setDragging} color={colors.accent2} />
-            <ChipRow options={Object.keys(POSITIONS)} value={labelOf(POSITIONS, t.position)} onChange={(v) => patchText(t.id, { position: POSITIONS[v as keyof typeof POSITIONS] })} />
+            <ChipRow
+              options={Object.keys(POSITIONS)}
+              value={t.x != null ? '' : labelOf(POSITIONS, t.position)}
+              onChange={(v) => patchText(t.id, { position: POSITIONS[v as keyof typeof POSITIONS], x: undefined, y: undefined })}
+            />
             <View style={{ height: 8 }} />
             <ChipRow options={Object.keys(SIZES)} value={labelOf(SIZES, t.size)} onChange={(v) => patchText(t.id, { size: SIZES[v as keyof typeof SIZES] })} />
+            <Text style={styles.subLabel}>Colore</Text>
+            <ColorPicker value={t.color} onChange={(hex) => patchText(t.id, { color: hex })} />
+            <View style={styles.moveRow}>
+              <MoveButton on={movingText === t.id} onPress={() => toggleMoveText(t)} />
+              {t.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
+            </View>
+            {movingText === t.id && <Text style={styles.moveHint}>Trascina il testo nell'anteprima: al centro compaiono le linee guida.</Text>}
           </View>
         ))}
         <Btn label="Aggiungi testo" variant="ghost" icon={<Plus size={17} color={colors.text} />} onPress={addText} disabled={busy} />
@@ -357,16 +435,13 @@ export default function ModifyScreen({ project, onBack, onDone }: {
               )}
               {overlayLook(o, m).aspect != null && (
                 <View style={styles.moveRow}>
-                  <Pressable onPress={() => toggleMove(o)} style={[styles.moveBtn, moving === o.id && styles.moveBtnOn]}>
-                    <Move size={15} color={moving === o.id ? '#0B0716' : colors.text} />
-                    <Text style={[styles.moveText, moving === o.id && { color: '#0B0716' }]}>{moving === o.id ? 'Fatto' : 'Sposta'}</Text>
-                  </Pressable>
+                  <MoveButton on={moving === o.id} onPress={() => toggleMove(o)} />
                   <Pressable hitSlop={6} onPress={() => resize(o, 1 / 1.15)} style={styles.sizeBtn}><Minus size={16} color={colors.text} /></Pressable>
                   <Pressable hitSlop={6} onPress={() => resize(o, 1.15)} style={styles.sizeBtn}><Plus size={16} color={colors.text} /></Pressable>
                   {o.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
                 </View>
               )}
-              {moving === o.id && <Text style={styles.moveHint}>Nell'anteprima qui sopra: un dito per spostarla, due dita per allargarla o stringerla.</Text>}
+              {moving === o.id && <Text style={styles.moveHint}>Nell'anteprima qui sopra: un dito per spostarla, due dita per allargarla o stringerla. Al centro compaiono le linee guida.</Text>}
             </View>
           );
         })}
@@ -390,7 +465,12 @@ export default function ModifyScreen({ project, onBack, onDone }: {
                 value={labelOf(SUB_SIZES, (spec.subStyle ?? SUB_DEFAULT).size)}
                 onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), size: SUB_SIZES[v as keyof typeof SUB_SIZES] } }))}
               />
-              <Text style={styles.hintSmall}>Stanno sempre in basso, sopra i tasti di TikTok e Instagram.</Text>
+              <Text style={styles.subLabel}>Colore</Text>
+              <ColorPicker
+                value={(spec.subStyle ?? SUB_DEFAULT).color}
+                onChange={(hex) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), color: hex } }))}
+              />
+              <Text style={styles.hintSmall}>Stanno sempre in basso, sopra i tasti di TikTok e Instagram. Il bordo si adatta al colore, così si leggono su qualsiasi sfondo.</Text>
             </>
           )}
         </View>
@@ -413,7 +493,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
           />
           <Btn
             label="Applica modifiche"
-            icon={<Wand2 size={17} color="#0B0716" />}
+            icon={<Wand2 size={17} color={colors.onAccent} />}
             onPress={() => render(spec)}
             loading={rendering}
             disabled={busy || !dirty}
@@ -428,21 +508,38 @@ export default function ModifyScreen({ project, onBack, onDone }: {
 const styles = StyleSheet.create({
   moveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   moveBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 36, borderRadius: 999,
+    flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, height: 38, borderRadius: radius.full,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
   },
   moveBtnOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  moveText: { color: colors.text, fontWeight: '700', fontSize: 13 },
+  moveText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 13.5 },
+  colors: { gap: 8, paddingVertical: 2 },
+  swatchRing: { padding: 2, borderRadius: 18, borderWidth: 2, borderColor: 'transparent' },
+  swatch: {
+    width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
   sizeBtn: {
     width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
   },
   moveHint: { color: colors.textDim, fontSize: 12, marginTop: 6 },
-  timelineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
+  player: {
+    backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
+    padding: 12, gap: 12, marginBottom: 6,
+  },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   playBtn: {
-    width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent,
+    shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 10, shadowOffset: { width: 0, height: 0 },
+  },
+  playerTime: { color: colors.text, fontFamily: fonts.semibold, fontSize: 14, fontVariant: ['tabular-nums'] },
+  muteBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.full,
     backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border,
   },
+  muteOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  muteText: { color: colors.text, fontSize: 12.5, fontFamily: fonts.medium },
   subLabel: { color: colors.textDim, fontSize: 12.5, marginTop: 12, marginBottom: 6 },
   hintSmall: { color: colors.textDim, fontSize: 11.5, marginTop: 8 },
   noteBox: {
