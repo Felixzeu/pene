@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { colors, fonts } from '../theme';
-import { LEGAL } from '../config';
+import { LEGAL, SUPPORT_URL } from '../config';
 import { t } from '../i18n';
 
 // Informative leggibili dall'app: privacy, termini e come cancellare i dati.
@@ -12,6 +12,7 @@ export default function LegalLinks({ center }: { center?: boolean }) {
     [t('Privacy'), LEGAL.privacy],
     [t('Termini d\'uso'), LEGAL.terms],
     [t('Cancellazione dati'), LEGAL.deletion],
+    [t('Assistenza'), SUPPORT_URL],
   ];
   return (
     <View style={[styles.row, center && { justifyContent: 'center' }]}>

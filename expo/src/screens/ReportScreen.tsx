@@ -6,6 +6,7 @@ import { Btn, ChipRow, Field, Header, Input, Screen, TextArea } from '../compone
 import { colors, radius } from '../theme';
 import { sendReport } from '../services/api';
 import { t, tServer } from '../i18n';
+import ContactLinks from '../components/ContactLinks';
 
 const KINDS = { 'Bug': 'bug', 'Idea': 'idea', 'Modmail': 'message' } as const;
 type KindLabel = keyof typeof KINDS;
@@ -73,6 +74,7 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
           <Input value={contact} onChangeText={setContact} autoCapitalize="none" placeholder={t('tu@email.it')} style={{ height: 50 }} />
         </Field>
         <Btn label={t('Invia')} icon={<Send size={17} color={colors.onAccent} />} onPress={send} loading={sending} style={{ marginTop: 8 }} />
+        <ContactLinks />
       </ScrollView>
     </Screen>
   );

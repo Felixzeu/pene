@@ -1,8 +1,11 @@
 // Traduzioni: testo italiano → fr.
 const dict: Record<string, string> = {
+  "Contatti e assistenza": "Contact et assistance",
+  "Per domande, problemi o richieste sui tuoi dati scrivici:": "Pour toute question, problème ou demande sur tes données, écris-nous :",
   "Privacy": "Confidentialité",
   "Termini d'uso": "Conditions d'utilisation",
   "Cancellazione dati": "Suppression des données",
+  "Assistenza": "Assistance",
   "Visibilità": "Visibilité",
   "Categoria": "Catégorie",
   "Avvisa gli iscritti": "Prévenir les abonnés",

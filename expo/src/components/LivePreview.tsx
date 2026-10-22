@@ -93,7 +93,10 @@ type El = {
   pad: number;                // riquadro attorno al testo (0 se non c'è): per la larghezza
 };
 /** Gesto in corso: posizione, ingrandimento, larghezza del testo e guide da mostrare. */
-type Live = { key: string; cx: number; cy: number; k: number; tw?: number; gx: number | null; gy: number | null };
+type Live = { key: string; cx: number; cy: number; k: number; tw?: number; gx: number | null; gy: number | null; grid?: boolean };
+
+// Linee orizzontali fisse a cui ci si aggancia (px su 1920): margini sicuri, quarti, terzi e centro.
+const GRID_Y = [SAFE.top, 480, 640, MID_Y, 1280, 1920 - SAFE.bottom, 1440];
 const keyOf = (s: NonNullable<Selection>) => `${s.kind}:${s.id}`;
 
 /** Guida a cui l'elemento è agganciato: la linea (target) e quale suo punto la tocca (offset dal centro). */
@@ -315,7 +318,7 @@ export default function LivePreview({
         // Linee di aggancio: centro, bordi e margini sicuri dello schermo, e bordi/centri degli altri elementi.
         const others = ctx.current.els.filter((o) => keyOf(o.sel) !== keyOf(el.sel) && o.w < 1080);
         st.tx = [MID_X, 0, 1080, SAFE.left, 1080 - SAFE.right, ...others.flatMap((o) => [o.cx, o.cx - o.w / 2, o.cx + o.w / 2])];
-        st.ty = [MID_Y, ...others.flatMap((o) => [o.cy, o.cy - o.h / 2, o.cy + o.h / 2])];
+        st.ty = [...GRID_Y, 0, 1920, ...others.flatMap((o) => [o.cy, o.cy - o.h / 2, o.cy + o.h / 2])];
         const cur = ctx.current.selected;
         if (!cur || keyOf(cur) !== keyOf(el.sel)) ctx.current.onSelect(el.sel);
         ctx.current.onDrag?.(true);
@@ -356,7 +359,7 @@ export default function LivePreview({
         if (newLock(p.lx, st.lx) || newLock(p.ly, st.ly)) Haptics.selectionAsync().catch(() => {});
         st.lx = p.lx;
         st.ly = p.ly;
-        setLive({ key, cx: p.cx, cy: p.cy, k: p.k, gx: p.lx?.target ?? null, gy: p.ly?.target ?? null });
+        setLive({ key, cx: p.cx, cy: p.cy, k: p.k, gx: p.lx?.target ?? null, gy: p.ly?.target ?? null, grid: moving });
       },
       onPanResponderRelease: (_e, gs) => {
         const st = g.current;
@@ -370,7 +373,7 @@ export default function LivePreview({
         ctx.current.onDrag?.(false);
         if (!st.moved) { setLive(null); return; } // solo selezione
         // Le guide spariscono appena si stacca il dito; la posizione resta finché arriva la spec nuova.
-        setLive((l) => (l ? { ...l, gx: null, gy: null } : l));
+        setLive((l) => (l ? { ...l, gx: null, gy: null, grid: false } : l));
         const sp = ctx.current.spec;
         const text = el.sel.kind === 'text' ? sp.texts.find((x) => x.id === el.sel.id) : undefined;
         if (st.mode === 'width' && st.pinch0 === 0) {
@@ -496,6 +499,8 @@ export default function LivePreview({
           })}
 
           {/* Linee guida: solo durante il trascinamento, quando l'elemento è agganciato */}
+          {/* Mentre si sposta: le linee orizzontali disponibili, appena accennate */}
+          {live?.grid && GRID_Y.map((y) => <View key={`g${y}`} style={[styles.gridH, { top: y * s - 0.5 }]} />)}
           {live?.gx != null && <View style={[styles.guideV, { left: live.gx * s - 0.5 }]} />}
           {live?.gy != null && <View style={[styles.guideH, { top: live.gy * s - 0.5 }]} />}
 
@@ -560,4 +565,5 @@ const styles = StyleSheet.create({
   videoText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   guideV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: colors.accent, opacity: 0.9 },
   guideH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: colors.accent, opacity: 0.9 },
+  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: colors.accent, opacity: 0.18 },
 });

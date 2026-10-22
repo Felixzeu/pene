@@ -8,6 +8,7 @@ import { deleteAccount, getAccount, getWallet, type Wallet } from '../services/a
 import { clearHistory } from '../services/history';
 import { t, tServer } from '../i18n';
 import LegalLinks from '../components/LegalLinks';
+import ContactLinks from '../components/ContactLinks';
 
 // Il tuo account: esci, oppure elimina tutto (richiesto dall'App Store).
 export default function AccountScreen({ email, onBack, onSocials }: { email: string | null; onBack: () => void; onSocials: () => void }) {
@@ -89,6 +90,7 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
         <Text style={styles.note}>
           {t('Eliminando l\'account cancelli anche i video sul server e i collegamenti ai social. I video già pubblicati sui social restano lì.')}
         </Text>
+        <ContactLinks />
         <LegalLinks />
       </ScrollView>
     </Screen>

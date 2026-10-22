@@ -18,3 +18,7 @@ export const LEGAL = {
   terms: `${SITE_URL}/terms.html`,
   deletion: `${SITE_URL}/data-deletion.html`,
 } as const;
+
+// Email pubbliche di contatto e assistenza (diverse dagli indirizzi tecnici e degli account sviluppatore).
+export const CONTACT_EMAILS = ['devvfelix@gmail.com', 'porceddduuu@gmail.com'] as const;
+export const SUPPORT_URL = `${SITE_URL}/support.html`;
