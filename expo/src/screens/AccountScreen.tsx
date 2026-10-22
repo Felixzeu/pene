@@ -7,6 +7,7 @@ import { signOut } from '../services/auth';
 import { deleteAccount, getAccount, getWallet, type Wallet } from '../services/api';
 import { clearHistory } from '../services/history';
 import { t, tServer } from '../i18n';
+import LegalLinks from '../components/LegalLinks';
 
 // Il tuo account: esci, oppure elimina tutto (richiesto dall'App Store).
 export default function AccountScreen({ email, onBack, onSocials }: { email: string | null; onBack: () => void; onSocials: () => void }) {
@@ -70,7 +71,9 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
               {!wallet.unlimited && <Btn label={t('Ricarica')} onPress={topUp} style={{ paddingHorizontal: 16 }} />}
             </View>
             <Text style={styles.costs}>
-              Script {wallet.costs.script} · Montaggio {wallet.costs.edit} · Modifica IA {wallet.costs.ai} · Export {wallet.costs.render} · Pubblicazione {wallet.costs.publish} per social
+              {t('Script {a} · Montaggio {b} · Modifica IA {c} · Export {d} · Pubblicazione {e} per social', {
+                a: wallet.costs.script, b: wallet.costs.edit, c: wallet.costs.ai, d: wallet.costs.render, e: wallet.costs.publish,
+              })}
             </Text>
             {wallet.history.slice(0, 6).map((h, i) => (
               <View key={i} style={styles.row}>
@@ -86,6 +89,7 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
         <Text style={styles.note}>
           {t('Eliminando l\'account cancelli anche i video sul server e i collegamenti ai social. I video già pubblicati sui social restano lì.')}
         </Text>
+        <LegalLinks />
       </ScrollView>
     </Screen>
   );

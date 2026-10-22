@@ -123,7 +123,7 @@ export async function googleYouTubeTokens(): Promise<{ accessToken: string; refr
     options: {
       redirectTo,
       skipBrowserRedirect: true,
-      scopes: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl',
+      scopes: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
       queryParams: { access_type: 'offline', prompt: 'consent' }, // serve per avere il refresh token
     },
   });

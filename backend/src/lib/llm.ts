@@ -232,7 +232,7 @@ Regole di posizionamento (fai scelte da montatore esperto):
 - I media con "cutout": true hanno già il soggetto ritagliato (senza sfondo): usali con "cutout": true, "mode": "pip",
   "w" tra 450 e 700 e un angolo che non copra il viso (di solito "bottom-left" o "bottom-right"). Metti "cutout": false
   solo se l'utente vuole la foto intera con lo sfondo. Le coordinate su schermo sono 1080×1920 px.
-- "x"/"y"/"w"/"fs" sono posizione e grandezza scelte a mano dall'utente: non cambiarle se non te lo chiede.
+- "x"/"y"/"w"/"fs"/"tw" sono posizione e grandezza scelte a mano dall'utente: non cambiarle se non te lo chiede.
   Per spostare un elemento cambia "x"/"y" (centro, schermo 1080×1920: angolo in alto a destra ≈ x 800 y 450).
 - Non sovrapporre nello stesso istante due elementi nella stessa posizione.
 - Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.

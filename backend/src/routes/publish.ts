@@ -1,5 +1,6 @@
 import { cleanTitle, normalizeHashtags } from '../lib/tags';
 import { Router } from 'express';
+import { tiktokCreator } from '../publishers/tiktok';
 import { z } from 'zod';
 import { config } from '../lib/config-bridge';
 import { getJob } from '../lib/queue';
@@ -33,6 +34,11 @@ const schema = z.object({
 });
 
 export const publishRouter = Router();
+
+// GET /api/publish/tiktok/creator — nome dell'account TikTok e se può pubblicare ora.
+publishRouter.get('/tiktok/creator', async (_req, res, next) => {
+  try { res.json(await tiktokCreator()); } catch (e) { next(e); }
+});
 
 // POST /api/publish — pubblica sui social scelti, uno per volta.
 // Ogni social è indipendente: se uno fallisce gli altri proseguono.

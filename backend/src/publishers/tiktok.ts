@@ -70,6 +70,23 @@ async function waitStatus(token: string, publishId: string): Promise<string> {
   return last;
 }
 
+/** Chi pubblica su TikTok: le linee guida chiedono di mostrarlo prima della pubblicazione. */
+export async function tiktokCreator(): Promise<{ nickname: string | null; avatar: string | null; canPost: boolean; maxSeconds: number | null }> {
+  const token = await freshAccessToken('tiktok');
+  const r = await post<{
+    data?: { creator_nickname?: string; creator_avatar_url?: string; max_video_post_duration_sec?: number };
+    error?: { code?: string; message?: string };
+  }>('/post/publish/creator_info/query/', token, {});
+  const code = r.error?.code;
+  return {
+    nickname: r.data?.creator_nickname ?? null,
+    avatar: r.data?.creator_avatar_url ?? null,
+    // spam_risk_too_many_posts, reached_active_user_cap...: TikTok in questo momento non accetta post da questo account.
+    canPost: !code || code === 'ok',
+    maxSeconds: r.data?.max_video_post_duration_sec ?? null,
+  };
+}
+
 export const tiktokPublish = async (meta: PublishMeta): Promise<PublishResult> => {
   const accessToken = await freshAccessToken('tiktok');
   const caption = [meta.title, meta.description, hashtagLine(meta.hashtags)].filter(Boolean).join('\n').slice(0, 2200);

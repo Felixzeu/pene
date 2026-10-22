@@ -17,7 +17,7 @@ export function recordVideo(job: Job): void {
     user_id: job.userId,
     project_id: job.projectId,
     title: job.title ?? null,
-    duration: job.duration ?? null,
+    duration: job.outDuration ?? job.duration ?? null,
     expired: false,
     expires_at: new Date(Date.now() + FILE_TTL).toISOString(),
   }).catch(log);

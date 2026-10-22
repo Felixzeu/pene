@@ -4,6 +4,7 @@ import { Mail } from 'lucide-react-native';
 import { Btn, Input, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
 import { resetPassword, signIn, signInWith, signUp } from '../services/auth';
+import LegalLinks from '../components/LegalLinks';
 import { t, tServer } from '../i18n';
 
 // Registrazione e accesso: email e password, oppure Google / Apple in un tocco.
@@ -122,6 +123,7 @@ export default function AuthScreen() {
           <Text style={styles.legal}>
             {t('Continuando accetti i Termini d\'uso e l\'Informativa privacy di viral.')}
           </Text>
+          <LegalLinks center />
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>

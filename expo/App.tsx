@@ -15,11 +15,15 @@ import ReportScreen from './src/screens/ReportScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
 import SocialsScreen from './src/screens/SocialsScreen';
+import MyVideosScreen from './src/screens/MyVideosScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setHistoryUser, upsertProject } from './src/services/history';
 import { accountsEnabled, getSession, onSessionChange } from './src/services/auth';
 import type { Project } from './src/types';
 import { colors } from './src/theme';
 import { useLanguage } from './src/services/language';
+
+const ONBOARDED = 'viral.onboarded.'; // + id utente: "Collega i tuoi social" già vista
 
 type Route =
   | { name: 'home' }
@@ -32,7 +36,8 @@ type Route =
   | { name: 'modify'; project: Project }
   | { name: 'report' }
   | { name: 'account' }
-  | { name: 'socials' };
+  | { name: 'socials' }
+  | { name: 'myvideos' };
 
 // Stack navigator minimale con transizione di entrata: le schermate sono un
 // flusso lineare (idea → script → registrazione → montaggio → pubblicazione),
@@ -57,13 +62,40 @@ export default function App() {
 
   const save = useCallback(async (p: Project) => { await upsertProject(p); }, []);
 
+  // Riprende il progetto dal punto in cui si era fermato.
+  const resume = (p: Project) => {
+    if (p.published?.length || p.finalVideoUrl) push({ name: 'publish', project: p });
+    else if (p.jobId) push({ name: 'edit', project: p });
+    else if (p.rawVideoUri) push({ name: 'review', project: p });
+    else if (p.scriptResult) push({ name: 'script', project: p });
+    else push({ name: 'new' });
+  };
+  // Scorri a destra: apre direttamente la modifica (video montato) o lo script.
+  const modify = (p: Project) => {
+    if (p.jobId && p.finalVideoUrl) setStack((s) => [...s, { name: 'publish', project: p }, { name: 'modify', project: p }]);
+    else if (p.jobId) push({ name: 'edit', project: p });
+    else if (p.scriptResult) push({ name: 'script', project: p });
+    else push({ name: 'new' });
+  };
+
   // Login: senza account Supabase configurati si entra direttamente (modalità solo-tu).
   const [user, setUser] = useState<{ id: string; email: string | null } | null | undefined>(accountsEnabled ? undefined : null);
+  // Account appena creato: prima della Home la schermata "Collega i tuoi social" (una volta sola).
+  const [onboarding, setOnboarding] = useState(false);
   useEffect(() => {
     if (!accountsEnabled) return;
     const apply = async (s: Awaited<ReturnType<typeof getSession>>) => {
       const u = s?.user ? { id: s.user.id, email: s.user.email ?? null } : null;
       await setHistoryUser(u?.id ?? null);
+      if (u && s?.user) {
+        const seen = await AsyncStorage.getItem(ONBOARDED + u.id).catch(() => '1');
+        // Solo per gli account nuovi (creati da meno di 7 giorni, es. dopo la conferma dell'email):
+        // chi era già registrato non la vede.
+        const fresh = Date.now() - Date.parse(s.user.created_at ?? '') < 7 * 24 * 3600 * 1000;
+        setOnboarding(!seen && fresh);
+      } else {
+        setOnboarding(false);
+      }
       setUser((prev) => {
         if (prev?.id !== u?.id) setStack([{ name: 'home' }]); // cambio account: si riparte dalla Home
         return u;
@@ -73,12 +105,26 @@ export default function App() {
     return onSessionChange((s) => { apply(s); });
   }, []);
 
+  const finishOnboarding = () => {
+    if (user) AsyncStorage.setItem(ONBOARDED + user.id, '1').catch(() => {});
+    setOnboarding(false);
+  };
+
   if (!fontsReady || user === undefined) return <View style={styles.root} />;
   if (accountsEnabled && !user) {
     return (
       <SafeAreaProvider>
         <StatusBar style="light" />
         <View style={styles.root}><AuthScreen /></View>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (onboarding) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <View style={styles.root}><SocialsScreen onDone={finishOnboarding} /></View>
       </SafeAreaProvider>
     );
   }
@@ -93,22 +139,14 @@ export default function App() {
             onReport={() => push({ name: 'report' })}
             onAccount={accountsEnabled ? () => push({ name: 'account' }) : undefined}
             onSocials={() => push({ name: 'socials' })}
-            onResume={(p) => {
-              // Riprende il progetto dal punto in cui si era fermato.
-              if (p.published?.length || p.finalVideoUrl) push({ name: 'publish', project: p });
-              else if (p.jobId) push({ name: 'edit', project: p });
-              else if (p.rawVideoUri) push({ name: 'review', project: p });
-              else if (p.scriptResult) push({ name: 'script', project: p });
-              else push({ name: 'new' });
-            }}
-            onModify={(p) => {
-              // Scorri a destra: apre direttamente la modifica (video montato) o lo script.
-              if (p.jobId && p.finalVideoUrl) setStack((s) => [...s, { name: 'publish', project: p }, { name: 'modify', project: p }]);
-              else if (p.jobId) push({ name: 'edit', project: p });
-              else if (p.scriptResult) push({ name: 'script', project: p });
-              else push({ name: 'new' });
-            }}
+            onMyVideos={() => push({ name: 'myvideos' })}
+            onResume={resume}
+            onModify={modify}
           />
+        )}
+
+        {current.name === 'myvideos' && (
+          <MyVideosScreen onBack={pop} onNew={() => push({ name: 'new' })} onResume={resume} onModify={modify} />
         )}
 
         {current.name === 'report' && <ReportScreen onBack={pop} />}

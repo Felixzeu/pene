@@ -10,3 +10,11 @@ export const PROVIDERS = [
 ] as const;
 
 export type ProviderId = (typeof PROVIDERS)[number]['id'];
+
+// Sito con le informative (Cloudflare Pages, cartella site/ del repo): aperte dall'app con il browser interno.
+export const SITE_URL = process.env.EXPO_PUBLIC_SITE_URL ?? 'https://viral.predage.tech';
+export const LEGAL = {
+  privacy: `${SITE_URL}/privacy.html`,
+  terms: `${SITE_URL}/terms.html`,
+  deletion: `${SITE_URL}/data-deletion.html`,
+} as const;

@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { CheckCircle2, Link2, Unlink } from 'lucide-react-native';
-import { Header, Screen } from '../components/ui';
+import { Btn, Header, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
 import { authUrl, linkedProviders, unlinkProvider } from '../services/api';
 import { linkSocial } from '../services/social';
 import { t, tServer } from '../i18n';
+import LegalLinks from '../components/LegalLinks';
 
 const COLORS: Record<ProviderId, string> = { youtube: '#FF0000', instagram: '#E1306C', facebook: '#1877F2', tiktok: '#25F4EE' };
 
 // I social collegati al tuo account: collega o scollega ognuno con un tocco.
-export default function SocialsScreen({ onBack }: { onBack: () => void }) {
+// Con onDone è la schermata di benvenuto dopo la registrazione ("Collega i tuoi social"):
+// niente indietro, e in fondo "Fallo più tardi" per andare alla Home senza collegare nulla.
+export default function SocialsScreen({ onBack, onDone }: { onBack?: () => void; onDone?: () => void }) {
+  const onboarding = !!onDone;
   const [linked, setLinked] = useState<Partial<Record<ProviderId, boolean>> | null>(null);
   const [busy, setBusy] = useState<ProviderId | null>(null);
   const refresh = useCallback(() => { linkedProviders().then(setLinked).catch(() => setLinked({})); }, []);
@@ -64,7 +68,16 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <Screen>
-      <Header title={t('Social collegati')} subtitle={t('Dove viral può pubblicare i tuoi video')} onBack={onBack} />
+      {onboarding ? (
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>{t('Collega i tuoi social')}</Text>
+          <Text style={styles.heroText}>
+            {t('Collega i tuoi account social per preparare ViralAPP alla gestione e alla pubblicazione dei tuoi contenuti.')}
+          </Text>
+        </View>
+      ) : (
+        <Header title={t('Social collegati')} subtitle={t('Dove viral può pubblicare i tuoi video')} onBack={onBack} />
+      )}
       <ScrollView contentContainerStyle={{ padding: 20, gap: 10 }}>
         {PROVIDERS.map((p) => {
           const on = !!linked?.[p.id];
@@ -76,7 +89,7 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
                 <Text style={[styles.state, on && { color: colors.ok }]}>
                   {linked === null ? t('controllo…') : on ? t('Collegato') : t('Non collegato')}
                 </Text>
-                {!on && linked !== null && (
+                {!on && linked !== null && !onboarding && (
                   <Pressable onPress={() => connectFromComputer(p.id, p.label)} hitSlop={6}>
                     <Text style={styles.alt}>{t('Collega dal computer')}</Text>
                   </Pressable>
@@ -99,9 +112,20 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
         <View style={styles.note}>
           <CheckCircle2 size={15} color={colors.textDim} />
           <Text style={styles.noteText}>
-            I collegamenti sono legati al tuo account viral: valgono su tutti i tuoi dispositivi. Scollegare non cancella i video già pubblicati.
+            {t('Il collegamento avviene sulla pagina ufficiale di ogni social: ViralAPP non vede mai la tua password e chiede solo i permessi per pubblicare i video che scegli tu. I collegamenti valgono su tutti i tuoi dispositivi e puoi toglierli quando vuoi; scollegare non cancella i video già pubblicati.')}
           </Text>
         </View>
+        {onboarding && (() => {
+          const any = Object.values(linked ?? {}).some(Boolean);
+          return (
+            <View style={{ marginTop: 14, gap: 4 }}>
+              {any && <Btn label={t('Continua')} onPress={onDone} />}
+              <Btn label={t('Fallo più tardi')} variant="ghost" onPress={onDone} />
+              <Text style={styles.later}>{t('Potrai collegarli quando vuoi da Account › Social collegati.')}</Text>
+              <LegalLinks center />
+            </View>
+          );
+        })()}
       </ScrollView>
     </Screen>
   );
@@ -122,4 +146,8 @@ const styles = StyleSheet.create({
   alt: { color: colors.accent, fontSize: 12, marginTop: 4, fontFamily: fonts.semibold },
   note: { flexDirection: 'row', gap: 8, marginTop: 10, paddingHorizontal: 4 },
   noteText: { flex: 1, color: colors.textDim, fontSize: 12.5, lineHeight: 18 },
+  hero: { paddingHorizontal: 20, paddingTop: 30, paddingBottom: 6, gap: 8 },
+  heroTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 30, letterSpacing: -1 },
+  heroText: { color: colors.textDim, fontSize: 14.5, lineHeight: 21 },
+  later: { color: colors.textDim, fontSize: 12, textAlign: 'center', marginTop: 4 },
 });

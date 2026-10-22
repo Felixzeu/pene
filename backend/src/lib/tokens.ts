@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { config, paths } from '../config';
 import { currentUser } from './user';
+import { AppError, ERR } from './errors';
 
 // Token OAuth cifrati a riposo (AES-256-GCM) su disco. Mai nell'app, mai in chiaro.
 // Ogni utente ha i suoi social: il file è { users: { <idUtente>: { <social>: token } } }.
@@ -37,11 +38,46 @@ async function write(store: TokenStore): Promise<void> {
   await writeFile(f);
 }
 
-/** Cancella tutti i social collegati dell'utente attuale (eliminazione account). */
+/** Cancella tutti i social collegati dell'utente attuale (eliminazione account), revocando l'accesso. */
 export async function removeAllTokens(): Promise<void> {
+  const store = await read();
+  for (const provider of Object.keys(store)) await revokeRemote(provider, store);
   const f = await readFile();
   delete f.users[currentUser().id];
   await writeFile(f);
+}
+
+/**
+ * Revoca l'accesso anche dal lato del social, così l'autorizzazione sparisce pure dalle
+ * impostazioni dell'utente su Google/Meta/TikTok. Non blocca mai lo scollegamento se fallisce.
+ * Instagram e Facebook usano la stessa app Meta: si revoca solo quando non ne resta collegato nessuno.
+ */
+async function revokeRemote(provider: string, store: TokenStore): Promise<void> {
+  try {
+    const t = await loadToken(provider);
+    const o = config.oauth;
+    const form = (body: Record<string, string>) => ({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(body),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (provider === 'youtube') {
+      await fetch('https://oauth2.googleapis.com/revoke', form({ token: t.refreshToken ?? t.accessToken }));
+    } else if (provider === 'tiktok') {
+      await fetch('https://open.tiktokapis.com/v2/oauth/revoke/', form({
+        client_key: o.tiktok.clientKey, client_secret: o.tiktok.clientSecret, token: t.accessToken,
+      }));
+    } else if (provider === 'instagram' || provider === 'facebook') {
+      const other = provider === 'instagram' ? 'facebook' : 'instagram';
+      if (store[other]) return;
+      await fetch(`https://graph.facebook.com/v21.0/me/permissions?access_token=${encodeURIComponent(t.accessToken)}`, {
+        method: 'DELETE', signal: AbortSignal.timeout(8000),
+      });
+    }
+  } catch (e) {
+    console.error(`[tokens] revoca ${provider} non riuscita:`, e instanceof Error ? e.message : e);
+  }
 }
 
 function key(): Buffer {
@@ -71,9 +107,11 @@ export async function loadToken(provider: string): Promise<{ accessToken: string
   return JSON.parse(payload);
 }
 
-/** Scollega un social (cancella il suo token). */
-export async function removeToken(provider: string): Promise<void> {
+/** Scollega un social: revoca l'accesso sul social e cancella il token. */
+export async function removeToken(provider: string, revoke = true): Promise<void> {
   const store = await read();
+  if (!store[provider]) return;
+  if (revoke) await revokeRemote(provider, store);
   delete store[provider];
   await write(store);
 }
@@ -116,7 +154,13 @@ export async function freshAccessToken(provider: 'youtube' | 'tiktok'): Promise<
     access_token?: string; refresh_token?: string; data?: { access_token?: string; refresh_token?: string };
   };
   const access = d.access_token ?? d.data?.access_token;
-  if (!access) return t.accessToken; // rinnovo fallito: proviamo con quello che c'è
+  const err = (d as { error?: unknown }).error;
+  if (!access && (err === 'invalid_grant' || (d as { data?: { error?: string } }).data?.error === 'invalid_grant')) {
+    // L'utente ha tolto il permesso dalle impostazioni del social (o è scaduto): risulta scollegato.
+    await removeToken(provider, false);
+    throw new AppError(ERR.accessRevoked(provider === 'youtube' ? 'YouTube' : 'TikTok'), 401);
+  }
+  if (!access) return t.accessToken; // rinnovo fallito per altri motivi: proviamo con quello che c'è
   await saveToken(provider, access, d.refresh_token ?? d.data?.refresh_token ?? t.refreshToken);
   return access;
 }

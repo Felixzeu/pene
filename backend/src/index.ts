@@ -43,6 +43,9 @@ app.use('/media', express.static(path.resolve(paths.videos), {
   setHeaders: (res) => { res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'); },
 }));
 
+// Anteprime di "I miei video": nome casuale come i video, nessun dato oltre al fotogramma.
+app.use('/thumbs', express.static(path.resolve(paths.thumbs), { maxAge: '7d' }));
+
 app.get('/api/health', (_req, res) => res.json({ ok: true, provider: config.llmProvider, accounts: accountsEnabled() }));
 
 // Tutto richiede il login (se gli account Supabase sono attivi), tranne i login dei social
@@ -90,6 +93,7 @@ setInterval(() => {
   cleanOlderThan(paths.tmp, 2 * 3600 * 1000);
   cleanOlderThan(paths.videos, 24 * 3600 * 1000);
   cleanOlderThan(paths.media, 24 * 3600 * 1000);
+  cleanOlderThan(paths.thumbs, 180 * 24 * 3600 * 1000);
   expireOld(); // nell'archivio su Supabase i video restano, segnati come scaduti
 }, 30 * 60 * 1000).unref();
 

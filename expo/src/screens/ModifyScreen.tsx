@@ -152,9 +152,10 @@ export default function ModifyScreen({ project, onBack, onDone }: {
       const full = o && overlayLook(o, m).aspect == null;
       patchOverlay(sel.id, { x: tr.x, y: tr.y, w: tr.w, ...(full ? { mode: 'pip' as const, cutout: false } : {}) });
     } else if (sel.kind === 'text') {
-      patchText(sel.id, { x: tr.x, y: tr.y, fs: tr.fs });
+      // La maniglia laterale cambia solo la larghezza: la grandezza resta quella di prima.
+      patchText(sel.id, { x: tr.x, y: tr.y, ...(tr.fs != null ? { fs: tr.fs } : {}), ...(tr.tw != null ? { tw: tr.tw } : {}) });
     } else {
-      setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), x: tr.x, y: tr.y, fs: tr.fs } }));
+      setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), x: tr.x, y: tr.y, ...(tr.fs != null ? { fs: tr.fs } : {}) } }));
     }
   };
 

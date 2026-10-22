@@ -28,6 +28,8 @@ export const textSchema = z.object({
   bg: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   // Grandezza scelta con le maniglie, px su 1080×1920 (al posto di "size").
   fs: z.number().min(20).max(240).optional(),
+  // Larghezza in cui il testo va a capo, scelta con le maniglie laterali (px; senza: i margini SAFE).
+  tw: z.number().min(120).max(1080).optional(),
 });
 
 export const overlaySchema = z.object({
@@ -245,7 +247,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     const look = t.bg
       ? `\\1c${assColor(t.color ?? '#000000')}\\3c${assColor(t.bg)}`
       : colorTags(t.color);
-    lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${t.bg ? 'TextBox' : 'TextCenter'},,0,0,0,,{${pos}${look}}${assText(t.text)}`);
+    // Con \pos libass va a capo in PlayResX - MarginL - MarginR: i margini dell'evento danno la larghezza scelta.
+    const ml = t.tw ? Math.max(1, Math.floor((1080 - t.tw) / 2)) : 0;
+    const mr = t.tw ? Math.max(1, 1080 - t.tw - ml) : 0;
+    lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${t.bg ? 'TextBox' : 'TextCenter'},,${ml},${mr},0,,{${pos}${look}}${assText(t.text)}`);
   }
   // Pulsanti: rettangolo arrotondato disegnato in ASS + testo, con entrata "pop" e una pulsazione.
   const Y = layoutStickers(spec, aspectResolver(media)); // niente sovrapposizioni tra pulsanti, testi e sottotitoli
@@ -337,4 +342,17 @@ export async function renderFinal(job: Job, spec: EditSpec): Promise<void> {
   await fs.rm(tmpOut, { force: true });
   job.finalPath = finalPath;
   job.spec = spec;
+  job.outDuration = Math.round(outLen * 10) / 10;
+  await writeThumb(finalPath, job.jobId, outLen);
+}
+
+/** Anteprima piccola per "I miei video" (un fotogramma). Non blocca il montaggio se non riesce. */
+async function writeThumb(video: string, jobId: string, len: number): Promise<void> {
+  try {
+    await fs.mkdir(paths.thumbs, { recursive: true });
+    await ff(['-ss', String(Math.min(1, len / 2)), '-i', video, '-frames:v', '1', '-vf', 'scale=270:-2', '-q:v', '5',
+      path.join(paths.thumbs, `${jobId}.jpg`)]);
+  } catch (e) {
+    console.error('[thumb]', e instanceof Error ? e.message : e);
+  }
 }

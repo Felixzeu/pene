@@ -8,6 +8,7 @@ import type { Word } from './whisper';
 import type { EditSpec, MediaItem } from './render';
 import { refund, type CoinAction } from './coins';
 import { recordVideo } from './videos';
+import { paths } from '../config';
 
 // Coda dei lavori con concorrenza 1: il montaggio video è pesante sulla CPU
 // (soprattutto sui piani di hosting gratuiti), quindi un job alla volta.
@@ -32,6 +33,7 @@ export interface Job {
   finalPath?: string;
   sourcePath?: string;   // video tagliato e ripulito da cui si rifà l'export finale
   duration?: number;     // durata di sourcePath in secondi
+  outDuration?: number;  // durata del video finale (dopo i tagli)
   spec?: EditSpec;       // modifiche applicate all'export finale
   media?: MediaItem[];   // immagini/video caricati dall'utente
   version: number;       // aumenta a ogni export, per non far usare all'app il video in cache
@@ -135,7 +137,8 @@ export async function removeUserJobs(): Promise<number> {
   let n = 0;
   for (const [k, job] of jobs) {
     if ((job.userId ?? 'local') !== id) continue;
-    for (const f of [job.rawPath, job.sourcePath, job.finalPath, ...(job.media ?? []).flatMap((m) => [m.path, m.cutoutPath])]) {
+    const thumb = path.join(paths.thumbs, `${job.jobId}.jpg`);
+    for (const f of [job.rawPath, job.sourcePath, job.finalPath, thumb, ...(job.media ?? []).flatMap((m) => [m.path, m.cutoutPath])]) {
       if (f) await fs.rm(f, { force: true }).catch(() => {});
     }
     jobs.delete(k);

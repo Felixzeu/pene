@@ -41,7 +41,8 @@ export const config = {
       clientId: process.env.YOUTUBE_CLIENT_ID ?? '',
       clientSecret: process.env.YOUTUBE_CLIENT_SECRET ?? '',
       redirect: `${PUBLIC_URL}/api/auth/youtube/callback`,
-      scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl',
+      // Caricare video + leggere il proprio canale (per controllare che esista): niente permessi di gestione.
+      scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
     },
     instagram: {
       clientId: process.env.META_APP_ID ?? '',
@@ -60,7 +61,8 @@ export const config = {
       clientSecret: process.env.TIKTOK_CLIENT_SECRET ?? '',
       redirect: `${PUBLIC_URL}/api/auth/tiktok/callback`,
       // Solo gli scope abilitati nell'app TikTok: uno non abilitato blocca il login.
-      scope: process.env.TIKTOK_SCOPES ?? 'user.info.basic,video.upload,video.publish',
+      // Direct Post usa solo video.publish (video.upload servirebbe per le bozze, che non usiamo).
+      scope: process.env.TIKTOK_SCOPES ?? 'user.info.basic,video.publish',
     },
   },
 };
@@ -68,6 +70,7 @@ export const config = {
 export const paths = {
   tmp: 'tmp',
   videos: 'public/videos',
+  thumbs: 'public/thumbs', // anteprime dei video: restano anche dopo che il video scade
   tokens: 'data/tokens.json',
   media: 'data/media',
 };

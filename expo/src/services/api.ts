@@ -210,8 +210,15 @@ export interface Wallet {
 }
 export const getWallet = () => request<Wallet>('/api/account/coins', {}, 15000);
 
-export interface ServerVideo { id: string; title: string | null; status: string; expired: boolean; expires_at: string | null }
+export interface ServerVideo {
+  id: string; project_id: string | null; title: string | null; duration: number | null; status: string;
+  expired: boolean; created_at: string | null; expires_at: string | null;
+}
 export const listServerVideos = () => request<{ videos: ServerVideo[] }>('/api/account/videos', {}, 15000).then((r) => r.videos);
+
+/** Account TikTok che pubblicherà (da mostrare prima di pubblicare, come chiedono le regole di TikTok). */
+export const tiktokCreator = () =>
+  request<{ nickname: string | null; avatar: string | null; canPost: boolean; maxSeconds: number | null }>('/api/publish/tiktok/creator', {}, 15000);
 
 export const deleteAccount = () => request<{ ok: boolean }>('/api/account', { method: 'DELETE' }, 60000);
 

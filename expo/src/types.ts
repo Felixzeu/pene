@@ -39,6 +39,7 @@ export interface TextItem {
   color?: string; // "#RRGGBB", bianco se manca
   bg?: string; // riquadro dietro il testo, "#RRGGBB" (nessuno se manca)
   fs?: number; // grandezza scelta con le maniglie, px su 1080×1920 (al posto di size)
+  tw?: number; // larghezza in cui va a capo, scelta con le maniglie laterali (px)
 }
 
 export interface OverlayItem {

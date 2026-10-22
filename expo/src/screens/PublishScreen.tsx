@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, loadPublishSettings, savePublishSettings } from '../s
 import { Badge, Btn, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
-import { linkedProviders, mediaUrl, publishVideo, unlinkProvider } from '../services/api';
+import { linkedProviders, mediaUrl, publishVideo, tiktokCreator, unlinkProvider } from '../services/api';
 import { saveVideoToPhotos } from '../services/download';
 import { linkSocial } from '../services/social';
 import { upsertProject } from '../services/history';
@@ -122,6 +122,13 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
   };
 
   const pending = selected.filter((id) => outcomeOf(id)?.status !== 'published');
+
+  // TikTok chiede di mostrare con quale account si pubblica e la conferma sull'uso della musica.
+  const tiktokOn = pending.includes('tiktok') && !!linked.tiktok;
+  const [creator, setCreator] = useState<Awaited<ReturnType<typeof tiktokCreator>> | null>(null);
+  useEffect(() => {
+    if (tiktokOn && !creator) tiktokCreator().then(setCreator).catch(() => {});
+  }, [tiktokOn, creator]);
 
   return (
     <Screen>
@@ -245,6 +252,25 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           </View>
         )}
 
+        {tiktokOn && (
+          <View style={styles.tiktokBox}>
+            {creator?.nickname ? (
+              <Text style={styles.tiktokText}>{t('TikTok: pubblichi come {name}', { name: creator.nickname })}</Text>
+            ) : null}
+            {creator && !creator.canPost && (
+              <Text style={[styles.tiktokText, { color: colors.err }]}>
+                {t('TikTok in questo momento non accetta nuovi post da questo account: riprova più tardi.')}
+              </Text>
+            )}
+            <Text style={styles.tiktokText}>
+              {t('Pubblicando su TikTok accetti la')}{' '}
+              <Text style={styles.tiktokLink} onPress={() => Linking.openURL('https://www.tiktok.com/legal/page/global/music-usage-confirmation/en')}>
+                {t('Music Usage Confirmation di TikTok')}
+              </Text>.
+            </Text>
+          </View>
+        )}
+
         {/* Il pulsante dice sempre "Pubblica": quanti social sono scelti si legge qui sopra. */}
         <Text style={styles.pendingLine}>
           {pending.length
@@ -286,6 +312,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tagLockedText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  tiktokBox: { marginTop: 18, padding: 12, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, gap: 4 },
+  tiktokText: { color: colors.textDim, fontSize: 12.5, lineHeight: 18 },
+  tiktokLink: { color: colors.accent, textDecorationLine: 'underline' },
   pendingLine: { color: colors.textDim, fontSize: 12.5, textAlign: 'center', marginTop: 20 },
   captionBox: {
     backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,

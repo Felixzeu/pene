@@ -23,4 +23,5 @@ export const ERR = {
   editNotUnderstood: 'L IA non ha capito la modifica: prova a scriverla in modo più preciso (es. "metti il testo Ciao al secondo 2").',
   mediaUnsupported: 'Formato non supportato: carica una foto (JPG/PNG) o un video.',
   publishFailed: (p: string, m: string) => `Pubblicazione su ${p} non riuscita: ${m}`,
+  accessRevoked: (p: string) => `${p} non ti autorizza più (permesso tolto o scaduto): ricollegalo da Social collegati.`,
 };
