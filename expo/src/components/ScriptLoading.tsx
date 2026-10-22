@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 import { Screen } from './ui';
 import { colors, fonts } from '../theme';
+import { t } from '../i18n';
 
 // Cosa sta facendo, in base a quanto è avanzata la barra.
 const STEPS: [number, string][] = [
@@ -34,12 +35,12 @@ export default function ScriptLoading() {
     <Screen>
       <View style={styles.center}>
         <Image source={require('../../assets/icon.png')} style={styles.logo} />
-        <Text style={styles.title}>Sto scrivendo lo script</Text>
+        <Text style={styles.title}>{t('Sto scrivendo lo script')}</Text>
         <View style={styles.track}>
           <Animated.View style={[styles.fill, { width }]} />
         </View>
         <View style={styles.row}>
-          <Text style={styles.step} numberOfLines={1}>{step}</Text>
+          <Text style={styles.step} numberOfLines={1}>{t(step)}</Text>
           <Text style={styles.pct}>{pct}%</Text>
         </View>
       </View>

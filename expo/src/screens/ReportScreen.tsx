@@ -5,6 +5,7 @@ import { ImagePlus, Send, X } from 'lucide-react-native';
 import { Btn, ChipRow, Field, Header, Input, Screen, TextArea } from '../components/ui';
 import { colors, radius } from '../theme';
 import { sendReport } from '../services/api';
+import { t, tServer } from '../i18n';
 
 const KINDS = { 'Bug': 'bug', 'Idea': 'idea', 'Modmail': 'message' } as const;
 type KindLabel = keyof typeof KINDS;
@@ -23,7 +24,7 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
   };
 
   const send = async () => {
-    if (text.trim().length < 3) { Alert.alert('Scrivi qualcosa', 'Descrivi il problema o il messaggio.'); return; }
+    if (text.trim().length < 3) { Alert.alert(t('Scrivi qualcosa'), t('Descrivi il problema o il messaggio.')); return; }
     setSending(true);
     try {
       await sendReport({
@@ -34,10 +35,10 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
         appVersion: '1.0.0',
         screenshot: shot ? { uri: shot.uri, name: shot.fileName ?? 'screenshot.jpg', type: shot.mimeType ?? 'image/jpeg' } : undefined,
       });
-      Alert.alert('Inviato, grazie!', 'Il tuo messaggio è arrivato.');
+      Alert.alert(t('Inviato, grazie!'), t('Il tuo messaggio è arrivato.'));
       onBack();
     } catch (e) {
-      Alert.alert('Invio non riuscito', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Invio non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setSending(false);
     }
@@ -45,33 +46,33 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <Screen>
-      <Header title="Modmail & bug report" subtitle="Segnala un problema o scrivici" onBack={onBack} />
+      <Header title={t('Modmail & bug report')} subtitle={t('Segnala un problema o scrivici')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-        <Field label="Tipo">
-          <ChipRow options={Object.keys(KINDS)} value={kind} onChange={(v) => setKind(v as KindLabel)} />
+        <Field label={t('Tipo')}>
+          <ChipRow options={Object.keys(KINDS).map((k) => t(k))} value={t(kind)} onChange={(v) => setKind((Object.keys(KINDS) as KindLabel[]).find((k) => t(k) === v) ?? 'Bug')} />
         </Field>
-        <Field label={kind === 'Bug' ? 'Cosa è successo?' : 'Messaggio'} hint={kind === 'Bug' ? 'Cosa stavi facendo, cosa ti aspettavi e cosa è successo invece.' : undefined}>
-          <TextArea value={text} onChangeText={setText} maxLength={4000} placeholder="Scrivi qui..." style={{ minHeight: 160 }} />
+        <Field label={kind === 'Bug' ? t('Cosa è successo?') : t('Messaggio')} hint={kind === 'Bug' ? t('Cosa stavi facendo, cosa ti aspettavi e cosa è successo invece.') : undefined}>
+          <TextArea value={text} onChangeText={setText} maxLength={4000} placeholder={t('Scrivi qui...')} style={{ minHeight: 160 }} />
         </Field>
-        <Field label="Screenshot" hint="Facoltativo, aiuta molto con i bug.">
+        <Field label={t('Screenshot')} hint={t('Facoltativo, aiuta molto con i bug.')}>
           {shot ? (
             <View style={styles.shotWrap}>
               <Image source={{ uri: shot.uri }} style={styles.shot} />
-              <Pressable onPress={() => setShot(null)} style={styles.shotX} hitSlop={8} accessibilityLabel="Togli screenshot">
+              <Pressable onPress={() => setShot(null)} style={styles.shotX} hitSlop={8} accessibilityLabel={t('Togli screenshot')}>
                 <X size={16} color="#fff" />
               </Pressable>
             </View>
           ) : (
             <Pressable onPress={pick} style={styles.pick}>
               <ImagePlus size={20} color={colors.textDim} />
-              <Text style={styles.pickText}>Aggiungi screenshot</Text>
+              <Text style={styles.pickText}>{t('Aggiungi screenshot')}</Text>
             </Pressable>
           )}
         </Field>
-        <Field label="Contatto" hint="Facoltativo: email o Discord, se vuoi una risposta.">
-          <Input value={contact} onChangeText={setContact} autoCapitalize="none" placeholder="tu@email.it" style={{ height: 50 }} />
+        <Field label={t('Contatto')} hint={t('Facoltativo: email o Discord, se vuoi una risposta.')}>
+          <Input value={contact} onChangeText={setContact} autoCapitalize="none" placeholder={t('tu@email.it')} style={{ height: 50 }} />
         </Field>
-        <Btn label="Invia" icon={<Send size={17} color={colors.onAccent} />} onPress={send} loading={sending} style={{ marginTop: 8 }} />
+        <Btn label={t('Invia')} icon={<Send size={17} color={colors.onAccent} />} onPress={send} loading={sending} style={{ marginTop: 8 }} />
       </ScrollView>
     </Screen>
   );

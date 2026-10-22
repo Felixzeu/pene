@@ -143,11 +143,11 @@ export const jobMediaSource = (jobId: string, mediaId: string, cutout = false) =
   headers: authHeaders(),
 });
 
-export const aiEdit = (jobId: string, instruction: string, spec: EditSpec) =>
+export const aiEdit = (jobId: string, instruction: string, spec: EditSpec, language?: string) =>
   request<{ spec: EditSpec; summary: string; notes?: string; media?: MediaItem[] }>(`/api/edit/${encodeURIComponent(jobId)}/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instruction, spec }),
+    body: JSON.stringify({ instruction, spec, language }),
   }, 120000);
 
 /** Rifà l'export finale con le modifiche: poi si segue l'avanzamento con getJob. */

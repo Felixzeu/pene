@@ -4,6 +4,7 @@ import { Mail } from 'lucide-react-native';
 import { Btn, Input, Screen } from '../components/ui';
 import { colors, fonts } from '../theme';
 import { resetPassword, signIn, signInWith, signUp } from '../services/auth';
+import { t, tServer } from '../i18n';
 
 // Registrazione e accesso: email e password, oppure Google / Apple in un tocco.
 export default function AuthScreen() {
@@ -19,23 +20,23 @@ export default function AuthScreen() {
     setError(null);
     setInfo(null);
     setBusy(kind);
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : 'Riprova.'); } finally { setBusy(null); }
+    try { await fn(); } catch (e) { setError(e instanceof Error ? tServer(e.message) : t('Riprova.')); } finally { setBusy(null); }
   };
 
   const submit = () => run('email', async () => {
     if (mode === 'login') return signIn(email, password);
     const mustConfirm = await signUp(email, password);
     if (mustConfirm) {
-      setInfo(`Ti abbiamo mandato un'email a ${email.trim()}: apri il link per confermare, poi accedi qui.`);
+      setInfo(t('Ti abbiamo mandato un\'email a {email}: apri il link per confermare, poi accedi qui.', { email: email.trim() }));
       setMode('login');
     }
   });
 
   const forgot = () => {
-    if (!validEmail) { setError('Scrivi prima la tua email, poi tocca "Password dimenticata".'); return; }
+    if (!validEmail) { setError(t('Scrivi prima la tua email, poi tocca "Password dimenticata".')); return; }
     run('email', async () => {
       await resetPassword(email);
-      Alert.alert('Email inviata', 'Apri il link nell\'email per scegliere una nuova password.');
+      Alert.alert(t('Email inviata'), t('Apri il link nell\'email per scegliere una nuova password.'));
     });
   };
 
@@ -44,14 +45,14 @@ export default function AuthScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
           <Text style={styles.logo}>viral<Text style={{ color: colors.accent }}>.</Text></Text>
-          <Text style={styles.title}>{mode === 'login' ? 'Bentornato.' : 'Crea il tuo account.'}</Text>
+          <Text style={styles.title}>{mode === 'login' ? t('Bentornato.') : t('Crea il tuo account.')}</Text>
           <Text style={styles.sub}>
-            {mode === 'login' ? 'Accedi per ritrovare i tuoi video e i social collegati.' : 'Gratis. Ti servono solo email e password.'}
+            {mode === 'login' ? t('Accedi per ritrovare i tuoi video e i social collegati.') : t('Gratis. Ti servono solo email e password.')}
           </Text>
 
           {Platform.OS === 'ios' && (
             <Btn
-              label="Continua con Apple"
+              label={t('Continua con Apple')}
               variant="ghost"
               icon={<Text style={styles.brand}></Text>}
               onPress={() => run('apple', () => signInWith('apple'))}
@@ -61,7 +62,7 @@ export default function AuthScreen() {
             />
           )}
           <Btn
-            label="Continua con Google"
+            label={t('Continua con Google')}
             variant="ghost"
             icon={<Text style={[styles.brand, { color: '#4285F4' }]}>G</Text>}
             onPress={() => run('google', () => signInWith('google'))}
@@ -71,13 +72,13 @@ export default function AuthScreen() {
           />
 
           <View style={styles.orRow}>
-            <View style={styles.line} /><Text style={styles.or}>oppure con l'email</Text><View style={styles.line} />
+            <View style={styles.line} /><Text style={styles.or}>{t('oppure con l\'email')}</Text><View style={styles.line} />
           </View>
 
           <Input
             value={email}
             onChangeText={setEmail}
-            placeholder="Email"
+            placeholder={t('Email')}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
@@ -87,7 +88,7 @@ export default function AuthScreen() {
           <Input
             value={password}
             onChangeText={setPassword}
-            placeholder={mode === 'signup' ? 'Password (almeno 6 caratteri)' : 'Password'}
+            placeholder={mode === 'signup' ? t('Password (almeno 6 caratteri)') : 'Password'}
             secureTextEntry
             autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             textContentType={mode === 'signup' ? 'newPassword' : 'password'}
@@ -95,7 +96,7 @@ export default function AuthScreen() {
           />
           {mode === 'login' && (
             <Pressable onPress={forgot} hitSlop={8} style={{ alignSelf: 'flex-end', marginBottom: 6 }}>
-              <Text style={styles.link}>Password dimenticata?</Text>
+              <Text style={styles.link}>{t('Password dimenticata?')}</Text>
             </Pressable>
           )}
 
@@ -103,7 +104,7 @@ export default function AuthScreen() {
           {info && <Text style={styles.info}>{info}</Text>}
 
           <Btn
-            label={mode === 'login' ? 'Accedi' : 'Crea account'}
+            label={mode === 'login' ? t('Accedi') : t('Crea account')}
             icon={<Mail size={18} color={colors.onAccent} />}
             onPress={submit}
             loading={busy === 'email'}
@@ -113,13 +114,13 @@ export default function AuthScreen() {
 
           <Pressable onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(null); }} style={styles.switch} hitSlop={8}>
             <Text style={styles.switchText}>
-              {mode === 'login' ? 'Non hai un account? ' : 'Hai già un account? '}
-              <Text style={styles.link}>{mode === 'login' ? 'Registrati' : 'Accedi'}</Text>
+              {mode === 'login' ? t('Non hai un account?') : t('Hai già un account?')}{' '}
+              <Text style={styles.link}>{mode === 'login' ? t('Registrati') : t('Accedi')}</Text>
             </Text>
           </Pressable>
 
           <Text style={styles.legal}>
-            Continuando accetti i Termini d'uso e l'Informativa privacy di viral.
+            {t('Continuando accetti i Termini d\'uso e l\'Informativa privacy di viral.')}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

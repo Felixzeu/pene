@@ -7,6 +7,7 @@ import { colors, fonts } from '../theme';
 import { generateScript } from '../services/api';
 import { languageInfo, useLanguage } from '../services/language';
 import type { Project, ScriptResult, TargetDuration } from '../types';
+import { t, tServer } from '../i18n';
 
 const TONES = ['Energico', 'Professionale', 'Divertente', 'Ispiratore', 'Educativo'];
 const DURATIONS = [
@@ -58,11 +59,11 @@ function DurationPicker({ value, onChange }: { value: string; onChange: (v: stri
           <Pressable key={d.value} onPress={() => onChange(d.value)} style={styles.segItem}>
             <Animated.View style={{ alignItems: 'center', opacity: light }}>
               <Text style={styles.segLabel}>{d.label}</Text>
-              <Text style={styles.segHint}>{d.hint}</Text>
+              <Text style={styles.segHint}>{t(d.hint)}</Text>
             </Animated.View>
             <Animated.View style={[StyleSheet.absoluteFill, styles.segCenter, { opacity: dark }]}>
               <Text style={[styles.segLabel, { color: colors.onAccent }]}>{d.label}</Text>
-              <Text style={[styles.segHint, { color: colors.onAccent }]}>{d.hint}</Text>
+              <Text style={[styles.segHint, { color: colors.onAccent }]}>{t(d.hint)}</Text>
             </Animated.View>
           </Pressable>
         );
@@ -119,12 +120,12 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
   const submit = async () => {
     if (manual) {
-      if (!ready) Alert.alert('Testo troppo corto', 'Scrivi il testo che vuoi leggere durante la registrazione.');
+      if (!ready) Alert.alert(t('Testo troppo corto'), t('Scrivi il testo che vuoi leggere durante la registrazione.'));
       else await useOwnText();
       return;
     }
     if (!ready) {
-      Alert.alert('Argomento troppo corto', 'Scrivi almeno una frase su cosa vuoi raccontare.');
+      Alert.alert(t('Argomento troppo corto'), t('Scrivi almeno una frase su cosa vuoi raccontare.'));
       return;
     }
     setLoading(true);
@@ -144,9 +145,9 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
       onScript(project);
     } catch (e) {
       Alert.alert(
-        'Generazione non riuscita',
-        e instanceof Error ? e.message : 'Riprova tra poco.',
-        [{ text: 'OK' }, { text: 'Riprova', onPress: submit }],
+        t('Generazione non riuscita'),
+        e instanceof Error ? tServer(e.message) : t('Riprova tra poco.'),
+        [{ text: 'OK' }, { text: t('Riprova'), onPress: submit }],
       );
     } finally {
       setLoading(false);
@@ -157,7 +158,7 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
   return (
     <Screen>
-      <Header title="Nuovo video" subtitle="Scrivi l'idea, al resto pensa l'IA" onBack={onBack} />
+      <Header title={t('Nuovo video')} subtitle={t('Scrivi l\'idea, al resto pensa l\'IA')} onBack={onBack} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
           {/* Script con l'IA o testo proprio */}
@@ -167,7 +168,7 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
               return (
                 <Pressable key={v} onPress={() => setMode(v)} style={[styles.modeBtn, on && styles.modeOn]}>
                   <Icon size={16} color={on ? colors.accent : colors.textDim} />
-                  <Text style={[styles.modeText, on && { color: colors.accent }]}>{label}</Text>
+                  <Text style={[styles.modeText, on && { color: colors.accent }]}>{t(label)}</Text>
                 </Pressable>
               );
             })}
@@ -175,11 +176,11 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
           {manual ? (
             <View style={[styles.ideaCard, text.length > 0 && { borderColor: colors.accent }]}>
-              <Text style={styles.ideaLabel}>Il tuo testo</Text>
+              <Text style={styles.ideaLabel}>{t('Il tuo testo')}</Text>
               <TextInput
                 value={text}
                 onChangeText={setText}
-                placeholder="Scrivi qui quello che dirai nel video: lo vedrai scorrere mentre registri."
+                placeholder={t('Scrivi qui quello che dirai nel video: lo vedrai scorrere mentre registri.')}
                 placeholderTextColor={colors.textDim}
                 maxLength={3000}
                 multiline
@@ -191,11 +192,11 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
           ) : (<>
           {/* Idea */}
           <View style={[styles.ideaCard, topic.length > 0 && { borderColor: colors.accent }]}>
-            <Text style={styles.ideaLabel}>Di cosa parla il video?</Text>
+            <Text style={styles.ideaLabel}>{t('Di cosa parla il video?')}</Text>
             <TextInput
               value={topic}
               onChangeText={setTopic}
-              placeholder="Es. 3 errori che fanno tutti quando iniziano a investire"
+              placeholder={t('Es. 3 errori che fanno tutti quando iniziano a investire')}
               placeholderTextColor={colors.textDim}
               maxLength={500}
               multiline
@@ -208,24 +209,24 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
             <View style={styles.ideas}>
               <View style={styles.ideasHead}>
                 <Lightbulb size={14} color={colors.warm} />
-                <Text style={styles.ideasTitle}>Serve ispirazione? Tocca un'idea</Text>
+                <Text style={styles.ideasTitle}>{t('Serve ispirazione? Tocca un\'idea')}</Text>
               </View>
               {IDEAS.map((i) => (
-                <Pressable key={i} onPress={() => setTopic(i)} style={({ pressed }) => [styles.idea, pressed && { opacity: 0.7 }]}>
-                  <Text style={styles.ideaText}>{i}</Text>
+                <Pressable key={i} onPress={() => setTopic(t(i))} style={({ pressed }) => [styles.idea, pressed && { opacity: 0.7 }]}>
+                  <Text style={styles.ideaText}>{t(i)}</Text>
                 </Pressable>
               ))}
             </View>
           )}
 
           {/* Durata */}
-          <Section icon={<Clock size={16} color={colors.accent} />} title="Durata">
+          <Section icon={<Clock size={16} color={colors.accent} />} title={t('Durata')}>
             <DurationPicker value={duration} onChange={setDuration} />
           </Section>
 
           {/* Tono */}
-          <Section icon={<Smile size={16} color={colors.accent} />} title="Tono">
-            <ChipRow options={TONES} value={tone} onChange={setTone} />
+          <Section icon={<Smile size={16} color={colors.accent} />} title={t('Tono')}>
+            <ChipRow options={TONES.map((x) => t(x))} value={t(tone)} onChange={(v) => setTone(TONES.find((x) => t(x) === v) ?? TONES[0])} />
           </Section>
           </>)}
 
@@ -233,14 +234,14 @@ export default function NewVideoScreen({ onBack, onScript, save }: {
 
         {/* Barra fissa in basso */}
         <View style={styles.bottomBar}>
-          <Text style={styles.summary} numberOfLines={1}>{manual ? '' : `${duration} s · ${tone} · `}{languageInfo(language).flag} {language}</Text>
+          <Text style={styles.summary} numberOfLines={1}>{manual ? '' : `${duration} s · ${t(tone)} · `}{languageInfo(language).flag} {language}</Text>
           <Btn
-            label={manual ? 'Continua' : 'Genera lo script'}
+            label={manual ? t('Continua') : t('Genera lo script')}
             icon={manual ? <ArrowRight size={18} color={colors.onAccent} /> : <Sparkles size={18} color={colors.onAccent} />}
             onPress={submit}
             disabled={!ready}
           />
-          {!manual && <Text style={styles.privacy}>Script scritto con Gemini (piano gratuito): evita dati sensibili.</Text>}
+          {!manual && <Text style={styles.privacy}>{t('Script scritto con Gemini (piano gratuito): evita dati sensibili.')}</Text>}
         </View>
       </KeyboardAvoidingView>
     </Screen>

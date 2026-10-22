@@ -6,6 +6,7 @@ import { colors, fonts } from '../theme';
 import { signOut } from '../services/auth';
 import { deleteAccount, getAccount, getWallet, type Wallet } from '../services/api';
 import { clearHistory } from '../services/history';
+import { t, tServer } from '../i18n';
 
 // Il tuo account: esci, oppure elimina tutto (richiesto dall'App Store).
 export default function AccountScreen({ email, onBack, onSocials }: { email: string | null; onBack: () => void; onSocials: () => void }) {
@@ -18,16 +19,16 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
   }, []);
 
   // Gli acquisti veri arriveranno con gli acquisti in-app di Apple (serve la build dell'app, non Expo Go).
-  const topUp = () => Alert.alert('Ricarica coin', 'L\'acquisto dei coin arriva presto.');
+  const topUp = () => Alert.alert(t('Ricarica coin'), t('L\'acquisto dei coin arriva presto.'));
 
   const remove = () =>
     Alert.alert(
-      'Eliminare l\'account?',
-      'Cancelliamo il tuo account, i video sul server e i social collegati. Non si può annullare.',
+      t('Eliminare l\'account?'),
+      t('Cancelliamo il tuo account, i video sul server e i social collegati. Non si può annullare.'),
       [
-        { text: 'Annulla', style: 'cancel' },
+        { text: t('Annulla'), style: 'cancel' },
         {
-          text: 'Elimina per sempre', style: 'destructive',
+          text: t('Elimina per sempre'), style: 'destructive',
           onPress: async () => {
             setBusy(true);
             try {
@@ -35,7 +36,7 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
               await clearHistory();
               await signOut();
             } catch (e) {
-              Alert.alert('Eliminazione non riuscita', e instanceof Error ? e.message : 'Riprova.');
+              Alert.alert(t('Eliminazione non riuscita'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
             } finally {
               setBusy(false);
             }
@@ -46,16 +47,16 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
 
   return (
     <Screen>
-      <Header title="Account" onBack={onBack} />
+      <Header title={t('Account')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
         <View style={styles.card}>
           <View style={styles.avatar}><UserRound size={22} color={colors.onAccent} /></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Accesso fatto come</Text>
-            <Text style={styles.email} numberOfLines={1}>{email ?? 'account senza email'}</Text>
+            <Text style={styles.label}>{t('Accesso fatto come')}</Text>
+            <Text style={styles.email} numberOfLines={1}>{email ?? t('account senza email')}</Text>
           </View>
           {admin && (
-            <View style={styles.admin}><Crown size={13} color={colors.onAccent} /><Text style={styles.adminText}>Admin</Text></View>
+            <View style={styles.admin}><Crown size={13} color={colors.onAccent} /><Text style={styles.adminText}>{t('Admin')}</Text></View>
           )}
         </View>
         {wallet && (
@@ -63,10 +64,10 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Coins size={22} color={colors.warm} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>I tuoi coin</Text>
-                <Text style={styles.coins}>{wallet.unlimited ? 'Illimitati' : wallet.coins}</Text>
+                <Text style={styles.label}>{t('I tuoi coin')}</Text>
+                <Text style={styles.coins}>{wallet.unlimited ? t('Illimitati') : wallet.coins}</Text>
               </View>
-              {!wallet.unlimited && <Btn label="Ricarica" onPress={topUp} style={{ paddingHorizontal: 16 }} />}
+              {!wallet.unlimited && <Btn label={t('Ricarica')} onPress={topUp} style={{ paddingHorizontal: 16 }} />}
             </View>
             <Text style={styles.costs}>
               Script {wallet.costs.script} · Montaggio {wallet.costs.edit} · Modifica IA {wallet.costs.ai} · Export {wallet.costs.render} · Pubblicazione {wallet.costs.publish} per social
@@ -79,11 +80,11 @@ export default function AccountScreen({ email, onBack, onSocials }: { email: str
             ))}
           </View>
         )}
-        <Btn label="Social collegati" variant="ghost" icon={<Link2 size={17} color={colors.text} />} onPress={onSocials} disabled={busy} />
-        <Btn label="Esci" variant="ghost" icon={<LogOut size={17} color={colors.text} />} onPress={() => signOut()} disabled={busy} />
-        <Btn label="Elimina account" variant="danger" icon={<Trash2 size={17} color={colors.err} />} onPress={remove} loading={busy} />
+        <Btn label={t('Social collegati')} variant="ghost" icon={<Link2 size={17} color={colors.text} />} onPress={onSocials} disabled={busy} />
+        <Btn label={t('Esci')} variant="ghost" icon={<LogOut size={17} color={colors.text} />} onPress={() => signOut()} disabled={busy} />
+        <Btn label={t('Elimina account')} variant="danger" icon={<Trash2 size={17} color={colors.err} />} onPress={remove} loading={busy} />
         <Text style={styles.note}>
-          Eliminando l'account cancelli anche i video sul server e i collegamenti ai social. I video già pubblicati sui social restano lì.
+          {t('Eliminando l\'account cancelli anche i video sul server e i collegamenti ai social. I video già pubblicati sui social restano lì.')}
         </Text>
       </ScrollView>
     </Screen>

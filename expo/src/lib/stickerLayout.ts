@@ -4,8 +4,13 @@
 // Stessa logica nell'app (expo/src/lib/stickerLayout.ts): anteprima e video finale coincidono.
 // Coordinate in px su 1080×1920.
 
+/** Centro predefinito dei sottotitoli: in mezzo in orizzontale, al 66% dell'altezza (sopra l'interfaccia dei social). */
+export const SUB_X = 540;
+export const SUB_Y = Math.round(1920 * 0.66);
+
 export interface LayoutSpec {
   subtitles: boolean;
+  subStyle?: { y?: number };
   texts: { start: number; end: number; position: 'top' | 'center' | 'bottom'; size: 'small' | 'medium' | 'large'; y?: number }[];
   overlays: LayoutOverlay[];
   stickers: { id: string; start: number; end: number; position: 'top' | 'center' | 'bottom' }[];
@@ -50,7 +55,8 @@ const overlapT = (a: { start: number; end: number }, b: { start: number; end: nu
 /** `aspectOf` dà altezza/larghezza del media mostrato, o null se copre tutto lo schermo. */
 export function layoutStickers(spec: LayoutSpec, aspectOf: (o: LayoutOverlay) => number | null = (o) => (o.mode === 'pip' ? 1 : null)): Record<string, number> {
   const fixed: Band[] = [];
-  if (spec.subtitles) fixed.push({ from: 1250, to: 1390, start: 0, end: Infinity });
+  const subY = spec.subStyle?.y ?? SUB_Y;
+  if (spec.subtitles) fixed.push({ from: subY - 90, to: subY + 90, start: 0, end: Infinity });
   for (const t of spec.texts) {
     const h = TEXT_H[t.size];
     const [from, to] = t.y != null ? [t.y - h / 2, t.y + h / 2]

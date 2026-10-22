@@ -201,24 +201,24 @@ function parseOutput(raw: string): ScriptOutput {
 const EDIT_SYSTEM = `Sei l'assistente di montaggio di un'app per video verticali (TikTok, Reels, Shorts).
 Ricevi lo stato attuale del montaggio (JSON "spec"), la trascrizione con i tempi e i media disponibili.
 Applica le modifiche chieste dall'utente e rispondi SEMPRE con JSON valido:
-{"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase in italiano", "notes": "cosa NON hai potuto fare e perché (solo se serve)"}
+{"spec": <spec completa aggiornata>, "summary": "cosa hai cambiato, in una frase", "notes": "cosa NON hai potuto fare e perché (solo se serve)"}
+"summary", "notes", "error" e i testi nuovi a schermo sono nella lingua indicata nel messaggio dell'utente.
 Formato della spec:
 {"trimStart": secondi da togliere all'inizio, "trimEnd": secondi da togliere alla fine,
  "subtitles": true|false,
- "subStyle": {"size": "small"|"medium"|"large", "color": "#RRGGBB" facoltativo},
- "muted": true|false (true = audio originale del video tolto),
+ "subStyle": {"size": "small"|"medium"|"large", "color": "#RRGGBB", "x": px, "y": px (centro), "fs": grandezza in px (30-170)},
  "texts": [{"id": string, "text": string, "start": s, "end": s, "position": "top"|"center"|"bottom", "size": "small"|"medium"|"large",
-            "color": "#RRGGBB" facoltativo, "x": px, "y": px (centro, facoltativi: se ci sono valgono al posto di "position")}],
+            "color": "#RRGGBB", "bg": "#RRGGBB" (riquadro dietro il testo), "x": px, "y": px (centro), "fs": grandezza in px (28-220)}],
  "overlays": [{"id": string, "mediaId": id di un media disponibile, "start": s, "end": s, "mode": "full"|"pip",
                "position": "top-left"|"top-right"|"center"|"bottom-left"|"bottom-right",
                "cutout": true|false, "w": larghezza in px (120-1080, facoltativo), "x": px, "y": px (centro, facoltativi)}],
  "stickers": [{"id": string, "kind": "follow"|"like"|"subscribe"|"comment"|"share"|"link", "label": testo facoltativo, "start": s, "end": s, "position": "top"|"center"|"bottom"}]}
 Strumenti:
-- "subStyle" cambia la grandezza dei sottotitoli: "size" (rimpicciolisci = più piccolo, ingrandisci = più grande).
-  Stanno sempre in basso, sopra l'interfaccia dei social: non si possono spostare (se l'utente lo chiede, mettilo nelle note).
-  "color" cambia il colore di sottotitoli o testi (es. rosso #FF2D2D, giallo #FFD42B, nero #000000, bianco #FFFFFF).
-  "muted": metti true solo se l'utente chiede di togliere l'audio/silenziare il video.
-  Quando li cambi, nel summary aggiungi che si possono regolare anche nella sezione "Sottotitoli".
+- Sottotitoli ("subStyle"): "fs" è la grandezza (default 74; più grandi = 90-110, più piccoli = 55-65), "x"/"y" il centro
+  (default x 540, y 1267, cioè centrati poco sotto la metà). "color" cambia il colore (es. rosso #FF2D2D, giallo #FFD42B,
+  nero #000000, bianco #FFFFFF). Nel summary ricorda che si possono anche toccare e trascinare nell'anteprima.
+- Testi nuovi: di default testo nero "#000000" su riquadro bianco "bg": "#FFFFFF", "fs" 64, "x" 540 e "y" tra 300 e 700
+  (in alto, lontano dai sottotitoli). Per togliere il riquadro ometti "bg".
 - "stickers": non aggiungerne di nuovi (lascia invariati quelli che ci sono).
 - Se l'utente chiede un'immagine che NON è tra i media (es. "una foto della Torre Eiffel", "il logo di Instagram"),
   aggiungi un overlay con "search": "parole di ricerca brevi in inglese" al posto di "mediaId": il backend la scarica da internet.
@@ -227,17 +227,18 @@ Regole di posizionamento (fai scelte da montatore esperto):
 - Se l'utente non indica i tempi, scegli il momento migliore leggendo la trascrizione: metti un'immagine quando viene nominata la cosa,
   uno sticker "follow" dopo l'hook o alla call to action, un testo sulla frase che riassume.
 - Durata: testi 2-3 s, immagini 2-4 s, sticker 2.5 s, salvo indicazioni.
-- Con i sottotitoli attivi non mettere testi in basso: usa "top" (o "center" per un titolo d'impatto).
+- Con i sottotitoli attivi non mettere testi vicino ai sottotitoli (y tra 1150 e 1400).
 - Foto orizzontali o loghi: "pip" (riquadro) in "top-right"; foto che devono riempire lo schermo: "full". Non coprire il viso troppo a lungo.
 - I media con "cutout": true hanno già il soggetto ritagliato (senza sfondo): usali con "cutout": true, "mode": "pip",
   "w" tra 450 e 700 e un angolo che non copra il viso (di solito "bottom-left" o "bottom-right"). Metti "cutout": false
   solo se l'utente vuole la foto intera con lo sfondo. Le coordinate su schermo sono 1080×1920 px.
-- "x"/"y" sono la posizione scelta a mano dall'utente: non cambiarle se non te lo chiede; se chiede di spostare una foto in un angolo, toglile.
+- "x"/"y"/"w"/"fs" sono posizione e grandezza scelte a mano dall'utente: non cambiarle se non te lo chiede.
+  Per spostare un elemento cambia "x"/"y" (centro, schermo 1080×1920: angolo in alto a destra ≈ x 800 y 450).
 - Non sovrapporre nello stesso istante due elementi nella stessa posizione.
 - Mantieni invariati gli elementi che l'utente non nomina; usa id nuovi e brevi per quelli nuovi.
-- Se una PARTE della richiesta non si può fare (es. cambiare il colore o il font dei sottotitoli, effetti, musica),
-  fai comunque tutto il resto e spiega in "notes" cosa non hai potuto fare. Il font e i colori dei sottotitoli non si cambiano.
-- Solo se NIENTE della richiesta è realizzabile rispondi {"error": "spiegazione breve in italiano"}.`;
+- Se una PARTE della richiesta non si può fare (es. cambiare il font, effetti, musica),
+  fai comunque tutto il resto e spiega in "notes" cosa non hai potuto fare.
+- Solo se NIENTE della richiesta è realizzabile rispondi {"error": "spiegazione breve"}.`;
 
 export async function generateEditSpec(p: {
   instruction: string;
@@ -247,6 +248,8 @@ export async function generateEditSpec(p: {
   media: { id: string; kind: string; name: string; duration?: number; cutout?: boolean; aspect?: number; cutoutAspect?: number }[];
   /** Scarica da internet un'immagine per un overlay con "search" e ne restituisce l'id. */
   fetchImage?: (query: string) => Promise<{ id: string; kind: string; name: string }>;
+  /** Lingua dell'app: per summary, note e testi nuovi. */
+  language?: string;
 }): Promise<{ spec: EditSpec; summary: string; notes?: string }> {
   const shift = p.spec.trimStart;
   const finalLen = Math.max(0, p.duration - p.spec.trimStart - p.spec.trimEnd);
@@ -256,6 +259,7 @@ export async function generateEditSpec(p: {
     .map((w) => `${w.t}s ${w.w}`)
     .join('\n');
   const user = `Richiesta dell'utente: ${p.instruction}
+Lingua per summary, notes e testi nuovi: ${p.language ?? 'Italiano'}
 
 Durata del video prima del taglio: ${p.duration.toFixed(1)} s (video finale attuale: ${finalLen.toFixed(1)} s)
 Spec attuale: ${JSON.stringify(p.spec)}
@@ -288,7 +292,15 @@ ${transcript.slice(0, 6000)}`;
   if (!parsed.success) throw new AppError(ERR.editNotUnderstood, 422);
   // Scarta media inesistenti inventati dal modello.
   const ids = new Set(p.media.map((m) => m.id));
-  const spec = { ...parsed.data, overlays: parsed.data.overlays.filter((o) => ids.has(o.mediaId)) };
+  // Testi nuovi: riquadro bianco con testo nero, se l'IA non ha scelto altro.
+  const known = new Set(p.spec.texts.map((t) => t.id));
+  const rawTexts = ((obj.spec ?? {}) as { texts?: { id?: string; bg?: unknown; color?: unknown }[] }).texts ?? [];
+  const texts = parsed.data.texts.map((t) => {
+    if (known.has(t.id)) return t;
+    const raw = rawTexts.find((x) => x.id === t.id);
+    return raw && raw.bg === undefined && raw.color === undefined ? { ...t, bg: '#FFFFFF', color: '#000000' } : t;
+  });
+  const spec = { ...parsed.data, texts, overlays: parsed.data.overlays.filter((o) => ids.has(o.mediaId)) };
   const notes = typeof obj.notes === 'string' && obj.notes.trim() ? obj.notes.trim().slice(0, 300) : undefined;
   return { spec, summary: (obj.summary ?? 'Modifica applicata.').slice(0, 300), notes };
 }

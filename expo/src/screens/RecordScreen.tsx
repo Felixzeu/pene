@@ -9,6 +9,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '../theme';
 import type { Project } from '../types';
+import { t } from '../i18n';
 
 // Registrazione a schermo diviso: script e comandi sopra, camera sotto. Teleprompter con scroll automatico regolabile,
 // dimensione testo, mirror per prompter a cristalli, countdown 3-2-1 e cambio camera.
@@ -92,11 +93,13 @@ export default function RecordScreen({ project, onClose, onDone }: {
     const blocked = (!permission.granted && !permission.canAskAgain) || (!micPermission.granted && !micPermission.canAskAgain);
     return (
       <View style={[styles.center, { paddingHorizontal: 32 }]}>
-        <Text style={styles.permTitle}>Servono fotocamera e microfono</Text>
+        <Text style={styles.permTitle}>{t('Servono fotocamera e microfono')}</Text>
         <Text style={styles.permText}>
           {blocked
-            ? `Hai negato ${!micPermission.granted ? 'il microfono' : 'la fotocamera'}: attivalo in Impostazioni › Expo Go, poi torna qui.`
-            : 'Per registrare con il teleprompter, autorizza fotocamera e microfono.'}
+            ? (!micPermission.granted
+              ? t('Hai negato il microfono: attivalo in Impostazioni › Expo Go, poi torna qui.')
+              : t('Hai negato la fotocamera: attivala in Impostazioni › Expo Go, poi torna qui.'))
+            : t('Per registrare con il teleprompter, autorizza fotocamera e microfono.')}
         </Text>
         <Pressable
           style={styles.permBtn}
@@ -106,10 +109,10 @@ export default function RecordScreen({ project, onClose, onDone }: {
             if (!micPermission.granted) await requestMicPermission();
           }}
         >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>{blocked ? 'Apri Impostazioni' : 'Concedi il permesso'}</Text>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>{blocked ? t('Apri Impostazioni') : t('Concedi il permesso')}</Text>
         </Pressable>
         <Pressable onPress={onClose} style={{ marginTop: 18 }}>
-          <Text style={{ color: colors.textDim }}>Torna indietro</Text>
+          <Text style={{ color: colors.textDim }}>{t('Torna indietro')}</Text>
         </Pressable>
       </View>
     );
@@ -169,7 +172,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
               <Text style={styles.recTimerText}>{timer}</Text>
             </View>
           ) : (
-            <Text style={styles.hint}>Leggi da qui, guarda in camera</Text>
+            <Text style={styles.hint}>{t('Leggi da qui, guarda in camera')}</Text>
           )}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Pressable style={[styles.circleBtn, mirror && { backgroundColor: colors.accent }]} onPress={() => setMirror((m) => !m)}>
@@ -217,7 +220,7 @@ export default function RecordScreen({ project, onClose, onDone }: {
         <View style={styles.controls}>
           <ControlStepper
             icon={<Gauge size={15} color={colors.textDim} />}
-            label="Vel."
+            label={t('Vel.')}
             value={speed}
             onMinus={() => setSpeed((s) => Math.max(1, s - 1))}
             onPlus={() => setSpeed((s) => Math.min(5, s + 1))}

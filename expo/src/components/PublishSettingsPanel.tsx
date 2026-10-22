@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { colors, fonts, radius } from '../theme';
 import type { ProviderId } from '../config';
 import type { PublishSettings } from '../types';
+import { t } from '../i18n';
 
 // Impostazioni per un social, mostrate sotto la sua riga nella schermata Pubblica.
 
@@ -27,7 +28,7 @@ function Segmented<T extends string>({ label, options, value, onChange }: {
       <View style={styles.seg}>
         {options.map((o) => (
           <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.segItem, value === o.value && styles.segOn]}>
-            <Text style={[styles.segText, value === o.value && { color: colors.onAccent }]}>{o.label}</Text>
+            <Text style={[styles.segText, value === o.value && { color: colors.onAccent }]}>{t(o.label)}</Text>
           </Pressable>
         ))}
       </View>
@@ -55,7 +56,7 @@ export default function PublishSettingsPanel({ provider, settings, onChange }: {
       {provider === 'youtube' && (
         <>
           <Segmented
-            label="Visibilità"
+            label={t('Visibilità')}
             value={settings.youtube.privacy}
             onChange={(privacy) => set('youtube', { privacy })}
             options={[{ value: 'public', label: 'Pubblico' }, { value: 'unlisted', label: 'Non in elenco' }, { value: 'private', label: 'Privato' }]}
@@ -65,17 +66,17 @@ export default function PublishSettingsPanel({ provider, settings, onChange }: {
               Finché Google non verifica il tuo progetto, YouTube mette comunque il video in privato.
             </Text>
           )}
-          <Segmented label="Categoria" value={settings.youtube.category} onChange={(category) => set('youtube', { category })} options={CATEGORIES} />
-          <Toggle label="Avvisa gli iscritti" value={settings.youtube.notifySubscribers} onChange={(notifySubscribers) => set('youtube', { notifySubscribers })} />
-          <Toggle label="Video per bambini" hint="Obbligatorio dirlo a YouTube: se attivo, niente commenti." value={settings.youtube.madeForKids} onChange={(madeForKids) => set('youtube', { madeForKids })} />
+          <Segmented label={t('Categoria')} value={settings.youtube.category} onChange={(category) => set('youtube', { category })} options={CATEGORIES} />
+          <Toggle label={t('Avvisa gli iscritti')} value={settings.youtube.notifySubscribers} onChange={(notifySubscribers) => set('youtube', { notifySubscribers })} />
+          <Toggle label={t('Video per bambini')} hint={t('Obbligatorio dirlo a YouTube: se attivo, niente commenti.')} value={settings.youtube.madeForKids} onChange={(madeForKids) => set('youtube', { madeForKids })} />
         </>
       )}
       {provider === 'instagram' && (
-        <Toggle label="Mostra anche nel feed" hint="Se spento il Reel appare solo nella scheda Reels." value={settings.instagram.shareToFeed} onChange={(shareToFeed) => set('instagram', { shareToFeed })} />
+        <Toggle label={t('Mostra anche nel feed')} hint={t('Se spento il Reel appare solo nella scheda Reels.')} value={settings.instagram.shareToFeed} onChange={(shareToFeed) => set('instagram', { shareToFeed })} />
       )}
       {provider === 'facebook' && (
         <Segmented
-          label="Sulla Pagina"
+          label={t('Sulla Pagina')}
           value={settings.facebook.state}
           onChange={(state) => set('facebook', { state })}
           options={[{ value: 'PUBLISHED', label: 'Pubblica subito' }, { value: 'DRAFT', label: 'Salva in bozza' }]}
@@ -83,10 +84,10 @@ export default function PublishSettingsPanel({ provider, settings, onChange }: {
       )}
       {provider === 'tiktok' && (
         <>
-          <Text style={[styles.hint, { marginBottom: 10 }]}>Su TikTok il video esce privato finché l'app non è approvata.</Text>
-          <Toggle label="Disattiva commenti" value={settings.tiktok.disableComment} onChange={(disableComment) => set('tiktok', { disableComment })} />
-          <Toggle label="Disattiva duetti" value={settings.tiktok.disableDuet} onChange={(disableDuet) => set('tiktok', { disableDuet })} />
-          <Toggle label="Disattiva stitch" value={settings.tiktok.disableStitch} onChange={(disableStitch) => set('tiktok', { disableStitch })} />
+          <Text style={[styles.hint, { marginBottom: 10 }]}>{t('Su TikTok il video esce privato finché l\'app non è approvata.')}</Text>
+          <Toggle label={t('Disattiva commenti')} value={settings.tiktok.disableComment} onChange={(disableComment) => set('tiktok', { disableComment })} />
+          <Toggle label={t('Disattiva duetti')} value={settings.tiktok.disableDuet} onChange={(disableDuet) => set('tiktok', { disableDuet })} />
+          <Toggle label={t('Disattiva stitch')} value={settings.tiktok.disableStitch} onChange={(disableStitch) => set('tiktok', { disableStitch })} />
         </>
       )}
     </View>

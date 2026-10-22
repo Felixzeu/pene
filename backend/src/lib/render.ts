@@ -6,7 +6,7 @@ import { paths } from '../config';
 import { AppError, ERR } from './errors';
 import type { Job } from './queue';
 import type { Word } from './whisper';
-import { layoutStickers, overlayBox } from './stickerLayout';
+import { SUB_X, SUB_Y, layoutStickers, overlayBox } from './stickerLayout';
 
 // Export finale configurabile: parte dal video già tagliato e ripulito
 // (lo stesso dell'anteprima) e applica le modifiche scelte nell'app o dall'IA:
@@ -24,6 +24,10 @@ export const textSchema = z.object({
   x: z.number().min(0).max(1080).optional(),
   y: z.number().min(0).max(1920).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  // Riquadro colorato dietro il testo (testo e riquadro si muovono insieme).
+  bg: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+  // Grandezza scelta con le maniglie, px su 1080×1920 (al posto di "size").
+  fs: z.number().min(20).max(240).optional(),
 });
 
 export const overlaySchema = z.object({
@@ -67,19 +71,21 @@ export const specSchema = z.object({
   trimEnd: z.number().min(0).default(0),
   subtitles: z.boolean().default(true),
   // Grandezza dei sottotitoli: stanno sempre in basso, sopra l'interfaccia di TikTok e Instagram.
+  // Aspetto dei sottotitoli: centro (x, y) e grandezza (fs) scelti nell'anteprima, in px su 1080×1920.
   subStyle: z.object({
     size: z.enum(['small', 'medium', 'large']).default('medium'),
     color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+    x: z.number().min(0).max(1080).optional(),
+    y: z.number().min(0).max(1920).optional(),
+    fs: z.number().min(24).max(200).optional(),
   }).default({ size: 'medium' }),
-  // Audio originale del video tolto (testi, foto e video sopra restano uguali).
-  muted: z.boolean().default(false),
   texts: z.array(textSchema).max(30).default([]),
   overlays: z.array(overlaySchema).max(20).default([]),
   stickers: z.array(stickerSchema).max(20).default([]),
 });
 
 export type EditSpec = z.infer<typeof specSchema>;
-export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, subStyle: { size: 'medium' }, muted: false, texts: [], overlays: [], stickers: [] });
+export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitles: true, subStyle: { size: 'medium' }, texts: [], overlays: [], stickers: [] });
 
 /**
  * Safe area di TikTok/Reels/Shorts su 1080×1920: in basso ci sono descrizione e nome (~ultimi 480 px),
@@ -88,8 +94,6 @@ export const defaultSpec = (): EditSpec => ({ trimStart: 0, trimEnd: 0, subtitle
  */
 export const SAFE = { left: 90, right: 180, top: 260, bottom: 560 } as const;
 export const SUB_SIZE = { small: 58, medium: 74, large: 92 } as const;
-/** Sottotitoli: sempre in basso (allineamento ASS 2), appena sopra la safe area. */
-export const SUB_POS = { align: 2, marginV: SAFE.bottom } as const;
 /** Parola pronunciata: gialla, o bianca se i sottotitoli sono già gialli. */
 export const subHighlight = (color?: string) => (color && color.toUpperCase() === '#FFD42B' ? '#FFFFFF' : '#FFD42B');
 
@@ -175,11 +179,24 @@ const colorTags = (hex?: string) => (hex ? `\\1c${assColor(hex)}${isDark(hex) ? 
 const assText = (s: string) => s.replace(/[{}]/g, '').replace(/\r?\n/g, '\\N');
 
 const SIZE = { small: 56, medium: 72, large: 96 } as const;
+/** Spazio tra il testo e il bordo del riquadro (come BOX_PAD nell'anteprima dell'app). */
+const BOX_PAD = 16;
+
+/** Centro di un testo: quello scelto nell'anteprima o quello della vecchia posizione Alto/Centro/Basso. */
+function textCenter(t: EditSpec['texts'][number]): { x: number; y: number } {
+  if (t.x != null && t.y != null) return { x: t.x, y: t.y };
+  const h = (t.fs ?? SIZE[t.size]) * 1.2 + (t.bg ? 2 * BOX_PAD : 0);
+  const x = SAFE.left + (1080 - SAFE.left - SAFE.right) / 2;
+  if (t.position === 'top') return { x, y: SAFE.top + h / 2 };
+  if (t.position === 'bottom') return { x, y: 1920 - SAFE.bottom - h / 2 };
+  return { x, y: 960 };
+}
 
 /** Sottotitoli karaoke + testi dell'utente in un unico file .ass (libass, niente font da configurare). */
 export function buildAss(words: Word[], spec: EditSpec, media: MediaItem[] = []): string {
   const ss = spec.subStyle ?? { size: 'medium' };
-  const sp = SUB_POS;
+  // Sottotitoli centrati nel punto scelto (di default in mezzo, al 66% dell'altezza).
+  const subPos = `\\an5\\pos(${Math.round(ss.x ?? SUB_X)},${Math.round(ss.y ?? SUB_Y)})\\fs${Math.round(ss.fs ?? SUB_SIZE[ss.size])}`;
   const head = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -188,10 +205,9 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Social,Inter-Black,${SUB_SIZE[ss.size]},&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,${sp.align},${SAFE.left},${SAFE.right},${sp.marginV},1
-Style: TextTop,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,8,${SAFE.left},${SAFE.right},${SAFE.top},1
+Style: Social,Inter-Black,${SUB_SIZE[ss.size]},&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,5,${SAFE.left},${SAFE.right},0,1
 Style: TextCenter,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,5,${SAFE.left},${SAFE.right},0,1
-Style: TextBottom,Inter-Black,72,&H00FFFFFF,&H00FFFFFF,&H00101014,&H80000000,-1,0,0,0,100,100,0,0,1,6,2,2,${SAFE.left},${SAFE.right},${SAFE.bottom},1
+Style: TextBox,Inter-Black,72,&H00000000,&H00000000,&H00FFFFFF,&H00000000,-1,0,0,0,100,100,0,0,3,${BOX_PAD},0,5,${SAFE.left},${SAFE.right},0,1
 Style: Sticker,Inter-Black,62,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,1,0,1,0,0,5,0,0,0,1
 
 [Events]
@@ -217,15 +233,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
         const text = page
           .map((x) => (x === w ? `{\\c${hi}}${assText(x.word)}{\\c${base}}` : assText(x.word)))
           .join(' ');
-        lines.push(`Dialogue: 0,${fmtTime(w.start)},${fmtTime(Math.max(end, w.start + 0.05))},Social,,0,0,0,,${ss.color ? `{${colorTags(ss.color)}}` : ''}${text}`);
+        lines.push(`Dialogue: 0,${fmtTime(w.start)},${fmtTime(Math.max(end, w.start + 0.05))},Social,,0,0,0,,{${subPos}${colorTags(ss.color)}}${text}`);
       }
     }
   }
   for (const t of spec.texts) {
-    const style = { top: 'TextTop', center: 'TextCenter', bottom: 'TextBottom' }[t.position];
-    // Spostato a mano: centrato nel punto scelto (va a capo dentro gli stessi margini dell'anteprima).
-    const pos = t.x != null && t.y != null ? `\\an5\\pos(${Math.round(t.x)},${Math.round(t.y)})` : '';
-    lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${style},,0,0,0,,{\\fs${SIZE[t.size]}${pos}${colorTags(t.color)}}${assText(t.text)}`);
+    // Centrato nel punto scelto (va a capo dentro gli stessi margini dell'anteprima).
+    const c = textCenter(t);
+    const pos = `\\an5\\pos(${Math.round(c.x)},${Math.round(c.y)})\\fs${Math.round(t.fs ?? SIZE[t.size])}`;
+    // Con il riquadro: stile a box pieno (BorderStyle 3), il colore del box è quello del bordo.
+    const look = t.bg
+      ? `\\1c${assColor(t.color ?? '#000000')}\\3c${assColor(t.bg)}`
+      : colorTags(t.color);
+    lines.push(`Dialogue: 1,${fmtTime(t.start)},${fmtTime(t.end)},${t.bg ? 'TextBox' : 'TextCenter'},,0,0,0,,{${pos}${look}}${assText(t.text)}`);
   }
   // Pulsanti: rettangolo arrotondato disegnato in ASS + testo, con entrata "pop" e una pulsazione.
   const Y = layoutStickers(spec, aspectResolver(media)); // niente sovrapposizioni tra pulsanti, testi e sottotitoli
@@ -268,7 +288,7 @@ export async function renderFinal(job: Job, spec: EditSpec): Promise<void> {
   const chain: string[] = [
     `[0:v]trim=start=${t0.toFixed(3)}:end=${t1.toFixed(3)},setpts=PTS-STARTPTS,` +
       'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v0]',
-    `[0:a]atrim=start=${t0.toFixed(3)}:end=${t1.toFixed(3)},asetpts=PTS-STARTPTS${spec.muted ? ',volume=0' : ''}[aout]`,
+    `[0:a]atrim=start=${t0.toFixed(3)}:end=${t1.toFixed(3)},asetpts=PTS-STARTPTS[aout]`,
   ];
   let last = 'v0';
   let n = 0;

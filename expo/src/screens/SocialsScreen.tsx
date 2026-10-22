@@ -6,6 +6,7 @@ import { colors, fonts } from '../theme';
 import { PROVIDERS, type ProviderId } from '../config';
 import { authUrl, linkedProviders, unlinkProvider } from '../services/api';
 import { linkSocial } from '../services/social';
+import { t, tServer } from '../i18n';
 
 const COLORS: Record<ProviderId, string> = { youtube: '#FF0000', instagram: '#E1306C', facebook: '#1877F2', tiktok: '#25F4EE' };
 
@@ -24,9 +25,9 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
     setBusy(id);
     try {
       const r = await linkSocial(id);
-      if (r) Alert.alert(r.ok ? 'Collegato!' : 'Collegamento non riuscito', r.message);
+      if (r) Alert.alert(r.ok ? t('Collegato!') : t('Collegamento non riuscito'), tServer(r.message));
     } catch (e) {
-      Alert.alert('Collegamento non riuscito', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Collegamento non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setBusy(null);
       refresh();
@@ -38,23 +39,23 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
     try {
       const url = await authUrl(id);
       Alert.alert(
-        `Collega ${label} dal computer`,
-        'Ti mando un link: aprilo sul computer (stessa rete Wi-Fi) entro 10 minuti e completa il login. Poi torna qui.',
-        [{ text: 'Annulla', style: 'cancel' }, { text: 'Condividi link', onPress: () => Share.share({ message: url }) }],
+        t('Collega {name} dal computer', { name: label }),
+        t('Ti mando un link: aprilo sul computer (stessa rete Wi-Fi) entro 10 minuti e completa il login. Poi torna qui.'),
+        [{ text: t('Annulla'), style: 'cancel' }, { text: t('Condividi link'), onPress: () => Share.share({ message: url }) }],
       );
     } catch (e) {
-      Alert.alert('Errore', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Errore'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     }
   };
 
   const disconnect = (id: ProviderId, label: string) =>
-    Alert.alert(`Scollegare ${label}?`, 'viral non potrà più pubblicare su questo account finché non lo ricolleghi.', [
-      { text: 'Annulla', style: 'cancel' },
+    Alert.alert(t('Scollegare {name}?', { name: label }), t('ViralAPP non potrà più pubblicare su questo account finché non lo ricolleghi.'), [
+      { text: t('Annulla'), style: 'cancel' },
       {
-        text: 'Scollega', style: 'destructive',
+        text: t('Scollega'), style: 'destructive',
         onPress: async () => {
           setBusy(id);
-          try { await unlinkProvider(id); } catch (e) { Alert.alert('Errore', e instanceof Error ? e.message : 'Riprova.'); }
+          try { await unlinkProvider(id); } catch (e) { Alert.alert(t('Errore'), e instanceof Error ? tServer(e.message) : t('Riprova.')); }
           setBusy(null);
           refresh();
         },
@@ -63,7 +64,7 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <Screen>
-      <Header title="Social collegati" subtitle="Dove viral può pubblicare i tuoi video" onBack={onBack} />
+      <Header title={t('Social collegati')} subtitle={t('Dove viral può pubblicare i tuoi video')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20, gap: 10 }}>
         {PROVIDERS.map((p) => {
           const on = !!linked?.[p.id];
@@ -73,23 +74,23 @@ export default function SocialsScreen({ onBack }: { onBack: () => void }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{p.label}</Text>
                 <Text style={[styles.state, on && { color: colors.ok }]}>
-                  {linked === null ? 'controllo…' : on ? 'Collegato' : 'Non collegato'}
+                  {linked === null ? t('controllo…') : on ? t('Collegato') : t('Non collegato')}
                 </Text>
                 {!on && linked !== null && (
                   <Pressable onPress={() => connectFromComputer(p.id, p.label)} hitSlop={6}>
-                    <Text style={styles.alt}>Collega dal computer</Text>
+                    <Text style={styles.alt}>{t('Collega dal computer')}</Text>
                   </Pressable>
                 )}
               </View>
               {busy === p.id ? <ActivityIndicator color={colors.accent} /> : on ? (
                 <Pressable onPress={() => disconnect(p.id, p.label)} style={[styles.btn, styles.btnOff]} hitSlop={6}>
                   <Unlink size={15} color={colors.err} />
-                  <Text style={[styles.btnText, { color: colors.err }]}>Scollega</Text>
+                  <Text style={[styles.btnText, { color: colors.err }]}>{t('Scollega')}</Text>
                 </Pressable>
               ) : (
                 <Pressable onPress={() => connect(p.id)} style={[styles.btn, styles.btnOn]} hitSlop={6} disabled={linked === null}>
                   <Link2 size={15} color={colors.onAccent} />
-                  <Text style={[styles.btnText, { color: colors.onAccent }]}>Collega</Text>
+                  <Text style={[styles.btnText, { color: colors.onAccent }]}>{t('Collega')}</Text>
                 </Pressable>
               )}
             </View>

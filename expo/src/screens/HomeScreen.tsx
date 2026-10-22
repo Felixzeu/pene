@@ -8,6 +8,7 @@ import { getWallet, linkedProviders, listServerVideos } from '../services/api';
 import { loadHistory, removeProject } from '../services/history';
 import { LANGUAGES, languageInfo, setLanguage, useLanguage } from '../services/language';
 import type { Project } from '../types';
+import { locale, t } from '../i18n';
 
 const STAGE_LABEL: Record<string, string> = {
   script: 'Script pronto',
@@ -67,10 +68,10 @@ function SwipeRow({ onPress, onDelete, onEdit, onSwipe, children }: {
     <View style={styles.swipeWrap}>
       <Animated.View style={[styles.behind, styles.behindEdit, { opacity: editOpacity }]}>
         <Pencil size={18} color={colors.onAccent} />
-        <Text style={styles.behindText}>Modifica</Text>
+        <Text style={styles.behindText}>{t('Modifica')}</Text>
       </Animated.View>
       <Animated.View style={[styles.behind, styles.behindDel, { opacity: delOpacity }]}>
-        <Text style={styles.behindText}>Elimina</Text>
+        <Text style={styles.behindText}>{t('Elimina')}</Text>
         <Trash2 size={18} color={colors.onAccent} />
       </Animated.View>
       <Animated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
@@ -109,19 +110,19 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
   // Lingua dell'app: vale per script e sottotitoli di tutti i nuovi video.
   const language = useLanguage();
   const pickLanguage = () => Alert.alert(
-    'Lingua dei video',
-    'Script e sottotitoli dei nuovi video saranno in questa lingua. I progetti già creati non cambiano.',
+    t('Lingua dell\'app'),
+    t('Testi dell\'app, script e sottotitoli dei nuovi video saranno in questa lingua. I progetti già creati non cambiano.'),
     [
       ...LANGUAGES.map((l) => ({ text: `${l.flag} ${l.label}${l.value === language ? ' ✓' : ''}`, onPress: () => setLanguage(l.value) })),
-      { text: 'Annulla', style: 'cancel' as const },
+      { text: t('Annulla'), style: 'cancel' as const },
     ],
   );
 
   const confirmDelete = (p: Project, reset: () => void) =>
-    Alert.alert('Elimina progetto', `Vuoi eliminare "${p.scriptResult?.title || p.topic}"?`, [
-      { text: 'Annulla', style: 'cancel', onPress: reset },
+    Alert.alert(t('Elimina progetto'), t('Vuoi eliminare "{name}"?', { name: p.scriptResult?.title || p.topic }), [
+      { text: t('Annulla'), style: 'cancel', onPress: reset },
       {
-        text: 'Elimina', style: 'destructive',
+        text: t('Elimina'), style: 'destructive',
         onPress: async () => { await removeProject(p.id); setReload((n) => n + 1); },
       },
     ]);
@@ -131,51 +132,51 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
       <View style={styles.top}>
         <Text style={styles.logo}>viral<Text style={{ color: colors.accent }}>.</Text></Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable onPress={pickLanguage} style={styles.coins} accessibilityLabel={`Lingua: ${language}`} hitSlop={6}>
+          <Pressable onPress={pickLanguage} style={styles.coins} accessibilityLabel={`${t('Lingua')}: ${language}`} hitSlop={6}>
             <Text style={{ fontSize: 15 }}>{languageInfo(language).flag}</Text>
           </Pressable>
           {coins !== undefined && (
-            <Pressable onPress={onAccount} style={styles.coins} accessibilityLabel="I tuoi coin" hitSlop={6}>
+            <Pressable onPress={onAccount} style={styles.coins} accessibilityLabel={t('I tuoi coin')} hitSlop={6}>
               <Coins size={16} color={colors.warm} />
               <Text style={styles.coinsText}>{coins === null ? '∞' : coins}</Text>
             </Pressable>
           )}
-          <Pressable onPress={onReport} style={styles.iconBtn} accessibilityLabel="Modmail e bug report" hitSlop={6}>
+          <Pressable onPress={onReport} style={styles.iconBtn} accessibilityLabel={t('Modmail e bug report')} hitSlop={6}>
             <MessageSquareWarning size={19} color={colors.text} />
           </Pressable>
           {onAccount && (
-            <Pressable onPress={onAccount} style={styles.iconBtn} accessibilityLabel="Account" hitSlop={6}>
+            <Pressable onPress={onAccount} style={styles.iconBtn} accessibilityLabel={t('Account')} hitSlop={6}>
               <UserRound size={19} color={colors.text} />
             </Pressable>
           )}
         </View>
       </View>
-      <Text style={styles.heroTitle}>Fai il prossimo{'\n'}video <Text style={{ color: colors.accent }}>virale</Text>.</Text>
+      <Text style={styles.heroTitle}>{t('Fai il prossimo')}{'\n'}{t('video')} <Text style={{ color: colors.accent }}>{t('virale')}</Text>.</Text>
 
       <Pressable onPress={onNew} style={({ pressed }) => [styles.newWrap, pressed && { transform: [{ scale: 0.98 }] }]}>
         <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.newCard}>
           <Plus size={28} color={colors.onAccent} />
           <View>
-            <Text style={styles.newTitle}>Nuovo video</Text>
-            <Text style={styles.newSub}>Dall'idea al post in pochi minuti</Text>
+            <Text style={styles.newTitle}>{t('Nuovo video')}</Text>
+            <Text style={styles.newSub}>{t('Dall\'idea al post in pochi minuti')}</Text>
           </View>
         </LinearGradient>
       </Pressable>
 
       <View style={styles.stats}>
         <View style={styles.stat}>
-          <Text style={styles.statLabel}>Questa settimana</Text>
-          <Text style={styles.statNum}>{thisWeek} video</Text>
+          <Text style={styles.statLabel}>{t('Questa settimana')}</Text>
+          <Text style={styles.statNum}>{t('{n} video', { n: thisWeek })}</Text>
         </View>
         <Pressable style={({ pressed }) => [styles.stat, pressed && { opacity: 0.7 }]} onPress={onSocials}>
-          <Text style={styles.statLabel}>Social collegati ›</Text>
+          <Text style={styles.statLabel}>{t('Social collegati ›')}</Text>
           <Text style={styles.statNum}>{linked} / 4</Text>
         </Pressable>
       </View>
 
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>Recenti</Text>
-        {history.length > 0 && <Text style={styles.sectionHint}>← elimina · modifica →</Text>}
+        <Text style={styles.sectionTitle}>{t('Recenti')}</Text>
+        {history.length > 0 && <Text style={styles.sectionHint}>{t('← elimina · modifica →')}</Text>}
       </View>
     </View>
   );
@@ -191,9 +192,9 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
         ListEmptyComponent={
           <View style={styles.empty}>
             <Video size={34} color={colors.textDim} />
-            <Text style={styles.emptyTitle}>Nessun video ancora</Text>
+            <Text style={styles.emptyTitle}>{t('Nessun video ancora')}</Text>
             <Text style={styles.emptyText}>
-              Crea il tuo primo progetto: scegli argomento e tono, e lascia che l'app scriva lo script.
+              {t('Crea il tuo primo progetto: scegli argomento e tono, e lascia che l\'app scriva lo script.')}
             </Text>
           </View>
         }
@@ -213,12 +214,12 @@ export default function HomeScreen({ onNew, onResume, onModify, onReport, onAcco
                   {item.scriptResult?.title || item.topic}
                 </Text>
                 <Text style={styles.cardMeta}>
-                  {item.platform} · {new Date(item.createdAt).toLocaleDateString('it-IT')}
+                  {new Date(item.createdAt).toLocaleDateString(locale())}
                 </Text>
               </View>
               <View style={[styles.pill, { backgroundColor: live ? colors.ok : gone ? colors.surfaceAlt : item.finalVideoUrl ? colors.warm : colors.surfaceAlt }]}>
-                <Text style={[styles.pillText, { color: (live || item.finalVideoUrl) && !(gone && !live) ? colors.onAccent : colors.textDim }]}>
-                  {live ? 'live' : gone ? 'scaduto' : item.finalVideoUrl ? 'pronto' : stageOf(item).toLowerCase()}
+                <Text style={[styles.pillText, { color: (live || item.finalVideoUrl) && !(gone && !live) ? colors.onWarm : colors.textDim }]}>
+                  {live ? 'live' : gone ? t('scaduto') : item.finalVideoUrl ? t('pronto') : t(stageOf(item)).toLowerCase()}
                 </Text>
               </View>
             </SwipeRow>

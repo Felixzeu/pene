@@ -2,9 +2,9 @@ import React, { useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
 
-// Timeline col dito, senza librerie: tutto con PanResponder.
-// VideoTimeline: tutto il video, con le maniglie per tagliare inizio e fine e la testina per scorrere.
-// RangeBar: quando compare un elemento (foto, testo) sul video finale; si sposta e si allunga col dito.
+// Barre col dito, senza librerie: tutto con PanResponder.
+// SeekBar: barra di avanzamento classica per scorrere il video.
+// RangeBar: un intervallo (quando compare un elemento, o la parte di video da tenere); si sposta e si allunga col dito.
 
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -30,58 +30,33 @@ function useHDrag(cb: {
   })).current.panHandlers;
 }
 
-/** Timeline del video intero (secondi del video originale). */
-export function VideoTimeline({ duration, trimStart, trimEnd, time, onSeek, onTrim, onDrag }: {
+/** Barra di avanzamento classica: tempo sul video finale, si trascina il cursore per spostarsi. */
+export function SeekBar({ duration, time, onSeek, onDrag }: {
   duration: number;
-  trimStart: number;
-  trimEnd: number;
   time: number;
   onSeek: (t: number) => void;
-  onTrim: (p: { trimStart?: number; trimEnd?: number }) => void;
   onDrag?: (d: boolean) => void;
 }) {
   const [w, setW] = useState(0);
   const total = Math.max(0.1, duration);
-  const px = (s: number) => (s / total) * w;
-  const end = total - trimEnd;
   const base = useRef(0);
-
   const seek = useHDrag({
-    onStart: (x) => { base.current = x; onSeek(clamp((x / w) * total, trimStart, end)); },
-    onMove: (dx) => onSeek(clamp(((base.current + dx) / w) * total, trimStart, end)),
+    onStart: (x) => { base.current = x; onSeek(clamp((x / Math.max(1, w)) * total, 0, total)); },
+    onMove: (dx) => onSeek(clamp(((base.current + dx) / Math.max(1, w)) * total, 0, total)),
     onDrag,
   });
-  const left = useHDrag({
-    onStart: () => { base.current = trimStart; },
-    onMove: (dx) => onTrim({ trimStart: r1(clamp(base.current + (dx / w) * total, 0, end - 1)) }),
-    onDrag,
-  });
-  const right = useHDrag({
-    onStart: () => { base.current = end; },
-    onMove: (dx) => onTrim({ trimEnd: r1(total - clamp(base.current + (dx / w) * total, trimStart + 1, total)) }),
-    onDrag,
-  });
-
+  const pos = w > 0 ? (clamp(time, 0, total) / total) * w : 0;
   return (
     <View>
-      <View style={styles.track} onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)} {...seek}>
-        {w > 0 && (
-          <>
-            <View pointerEvents="none" style={[styles.cut, { left: 0, width: px(trimStart) }]} />
-            <View pointerEvents="none" style={[styles.cut, { right: 0, width: px(trimEnd) }]} />
-            <View pointerEvents="none" style={[styles.kept, { left: px(trimStart), width: Math.max(0, px(end) - px(trimStart)) }]} />
-            <View style={[styles.head, { left: px(clamp(time, 0, total)) - 1 }]} pointerEvents="none">
-              <View style={styles.knob} />
-            </View>
-            <View {...left} style={[styles.handle, { left: px(trimStart) - 14 }]}><View style={[styles.grip, styles.gripL]}><View style={styles.gripLine} /></View></View>
-            <View {...right} style={[styles.handle, { left: px(end) - 14 }]}><View style={[styles.grip, styles.gripR]}><View style={styles.gripLine} /></View></View>
-          </>
-        )}
+      <View style={styles.seekHit} onLayout={(e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width)} {...seek}>
+        <View style={styles.seekTrack} pointerEvents="none">
+          <View style={[styles.seekFill, { width: pos }]} />
+        </View>
+        {w > 0 && <View pointerEvents="none" style={[styles.thumb, { left: pos - 8 }]} />}
       </View>
       <View style={styles.labels}>
-        <Text style={styles.label}>{trimStart > 0 ? `✂ ${r1(trimStart)}s` : fmt(0)}</Text>
-        <Text style={styles.label}>trascina le maniglie per tagliare</Text>
-        <Text style={styles.label}>{trimEnd > 0 ? `✂ ${r1(trimEnd)}s` : fmt(total)}</Text>
+        <Text style={[styles.label, { color: colors.text }]}>{fmt(clamp(time, 0, total))}</Text>
+        <Text style={styles.label}>{fmt(total)}</Text>
       </View>
     </View>
   );
@@ -142,17 +117,10 @@ export function RangeBar({ total, start, end, onChange, onDrag, color = colors.a
 }
 
 const styles = StyleSheet.create({
-  track: { height: 44, borderRadius: 12, backgroundColor: colors.surfaceAlt, overflow: 'visible', justifyContent: 'center', marginTop: 6 },
-  kept: { position: 'absolute', top: 0, bottom: 0, backgroundColor: colors.accentSoft, borderTopWidth: 2, borderBottomWidth: 2, borderColor: colors.accent },
-  cut: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12 },
-  // Testina: linea bianca con un pallino in cima.
-  head: { position: 'absolute', top: -6, bottom: -2, width: 2, borderRadius: 1, backgroundColor: '#fff', alignItems: 'center' },
-  knob: { position: 'absolute', top: -5, width: 12, height: 12, borderRadius: 6, backgroundColor: '#fff', borderWidth: 2, borderColor: colors.accent },
-  handle: { position: 'absolute', top: 0, bottom: 0, width: 28, alignItems: 'center', justifyContent: 'center' },
-  grip: { width: 14, height: 44, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  gripL: { borderTopLeftRadius: 10, borderBottomLeftRadius: 10, marginLeft: 14 },
-  gripR: { borderTopRightRadius: 10, borderBottomRightRadius: 10, marginRight: 14 },
-  gripLine: { width: 2, height: 16, borderRadius: 1, backgroundColor: 'rgba(255,255,255,0.85)' },
+  seekHit: { height: 28, justifyContent: 'center' },
+  seekTrack: { height: 4, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  seekFill: { height: '100%', backgroundColor: colors.accent },
+  thumb: { position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: colors.accent, borderWidth: 2, borderColor: '#fff' },
   labels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   label: { color: colors.textDim, fontSize: 11.5 },
   rangeTrack: { height: 34, borderRadius: 8, backgroundColor: colors.surfaceAlt },

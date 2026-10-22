@@ -136,7 +136,7 @@ editRouter.get('/:jobId/media/:mediaId', (req, res, next) => {
 editRouter.post('/:jobId/ai', async (req, res, next) => {
   try {
     const job = readyJob(req.params.jobId);
-    const body = z.object({ instruction: z.string().min(3).max(1000), spec: specSchema }).parse(req.body);
+    const body = z.object({ instruction: z.string().min(3).max(1000), spec: specSchema, language: z.string().max(30).optional() }).parse(req.body);
     const out = await withCoins('ai', () => generateEditSpec({
       instruction: body.instruction,
       spec: body.spec,
@@ -144,6 +144,7 @@ editRouter.post('/:jobId/ai', async (req, res, next) => {
       duration: job.duration ?? 0,
       media: (job.media ?? []).map(mediaInfo),
       fetchImage: (q) => fetchWebImage(job, q),
+      language: body.language,
     }));
     saveJobs();
     res.json({ ...out, media: (job.media ?? []).map(mediaInfo) });

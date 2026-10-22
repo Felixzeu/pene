@@ -12,6 +12,7 @@ import { saveVideoToPhotos } from '../services/download';
 import { linkSocial } from '../services/social';
 import { upsertProject } from '../services/history';
 import type { Project, PublishOutcome, PublishSettings } from '../types';
+import { t, tServer } from '../i18n';
 
 /** L'hashtag fisso dell'app, sempre primo (come BRAND_TAG nel backend). */
 const BRAND_TAG = 'viralAPP';
@@ -57,18 +58,18 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
     setLinking(id);
     try {
       const r = await linkSocial(id);
-      if (r) Alert.alert(r.ok ? 'Collegato!' : 'Collegamento non riuscito', r.message);
+      if (r) Alert.alert(r.ok ? t('Collegato!') : t('Collegamento non riuscito'), tServer(r.message));
     } catch (e) {
-      Alert.alert('Collegamento non riuscito', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Collegamento non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setLinking(null);
       refreshLinked();
     }
   };
   const disconnect = (id: ProviderId, label: string) =>
-    Alert.alert(`Scollegare ${label}?`, 'Potrai ricollegarlo quando vuoi.', [
-      { text: 'Annulla', style: 'cancel' },
-      { text: 'Scollega', style: 'destructive', onPress: () => unlinkProvider(id).then(refreshLinked).catch(() => {}) },
+    Alert.alert(t('Scollegare {name}?', { name: label }), t('Potrai ricollegarlo quando vuoi.'), [
+      { text: t('Annulla'), style: 'cancel' },
+      { text: t('Scollega'), style: 'destructive', onPress: () => unlinkProvider(id).then(refreshLinked).catch(() => {}) },
     ]);
 
   const videoUrl = mediaUrl(project.finalVideoUrl);
@@ -80,7 +81,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
 
   const publish = async (providers: ProviderId[]) => {
     if (!project.jobId || providers.length === 0) return;
-    if (!title.trim()) { setError('Scrivi un titolo prima di pubblicare.'); return; }
+    if (!title.trim()) { setError(t('Scrivi un titolo prima di pubblicare.')); return; }
     setError(null);
     setBusy(providers);
     try {
@@ -101,7 +102,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
       await upsertProject(next);
       update(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Pubblicazione non riuscita.');
+      setError(e instanceof Error ? tServer(e.message) : t('Pubblicazione non riuscita.'));
     } finally {
       setBusy([]);
     }
@@ -112,9 +113,9 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
     setSaving(true);
     try {
       await saveVideoToPhotos(videoUrl);
-      Alert.alert('Video salvato', 'Lo trovi nell app Foto.');
+      Alert.alert(t('Video salvato'), t('Lo trovi nell\'app Foto.'));
     } catch (e) {
-      Alert.alert('Salvataggio non riuscito', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Salvataggio non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setSaving(false);
     }
@@ -124,7 +125,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
 
   return (
     <Screen>
-      <Header title="Pubblica" subtitle="Scegli i social e pubblica il video montato" onBack={onBack} />
+      <Header title={t('Pubblica')} subtitle={t('Scegli i social e pubblica il video montato')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {videoUrl ? (
           <View style={styles.playerWrap}>
@@ -134,14 +135,14 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
         {videoUrl ? (
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 22 }}>
             <Btn
-              label="Modifica"
+              label={t('Modifica')}
               variant="ghost"
               icon={<Wand2 size={17} color={colors.text} />}
               onPress={() => onModify(project)}
               style={{ flex: 1 }}
             />
             <Btn
-              label="Salva"
+              label={t('Salva')}
               variant="ghost"
               icon={<Download size={17} color={colors.text} />}
               onPress={download}
@@ -151,13 +152,13 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           </View>
         ) : null}
 
-        <Field label="Titolo">
-          <Input value={title} onChangeText={setTitle} maxLength={100} placeholder="Il titolo del video" style={{ height: 50 }} />
+        <Field label={t('Titolo')}>
+          <Input value={title} onChangeText={setTitle} maxLength={100} placeholder={t('Il titolo del video')} style={{ height: 50 }} />
         </Field>
-        <Field label="Descrizione" hint="Facoltativa. Gli hashtag vengono aggiunti in automatico.">
-          <TextArea value={description} onChangeText={setDescription} maxLength={2200} placeholder="Racconta il video in due righe" />
+        <Field label={t('Descrizione')} hint={t('Facoltativa. Gli hashtag vengono aggiunti in automatico.')}>
+          <TextArea value={description} onChangeText={setDescription} maxLength={2200} placeholder={t('Racconta il video in due righe')} />
         </Field>
-        <Field label="Hashtag" hint="#viralAPP c'è sempre. Aggiungi gli altri separati da spazio.">
+        <Field label={t('Hashtag')} hint={t('#viralAPP c\'è sempre. Aggiungi gli altri separati da spazio.')}>
           <View style={styles.tagRow}>
             <View style={styles.tagLocked}><Text style={styles.tagLockedText}>#{BRAND_TAG}</Text></View>
             <Input
@@ -166,7 +167,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
               onBlur={() => setHashtags(cleanTags(hashtags).map((h) => `#${h}`).join(' '))}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="#tema #nicchia"
+              placeholder={t('#tema #nicchia')}
               style={{ height: 50, flex: 1 }}
             />
           </View>
@@ -174,13 +175,13 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
 
         {/* Come apparirà sotto il video: testo e hashtag insieme. */}
         <View style={styles.captionBox}>
-          <Text style={styles.captionLabel}>Anteprima della didascalia</Text>
+          <Text style={styles.captionLabel}>{t('Anteprima della didascalia')}</Text>
           {!!title.trim() && <Text style={styles.captionTitle}>{title.trim()}</Text>}
           {!!description.trim() && <Text style={styles.captionText}>{description.trim()}</Text>}
           <Text style={styles.captionTags}>{[BRAND_TAG, ...cleanTags(hashtags)].slice(0, 15).map((h) => `#${h}`).join(' ')}</Text>
         </View>
 
-        <Text style={styles.section}>Social</Text>
+        <Text style={styles.section}>{t('Social')}</Text>
         <View style={styles.card}>
           {PROVIDERS.map((p, i) => {
             const o = outcomeOf(p.id);
@@ -195,7 +196,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.provider}>{p.label}</Text>
-                    {o?.message ? <Text style={[styles.msg, o.status === 'error' && { color: colors.err }]}>{o.message}</Text> : null}
+                    {o?.message ? <Text style={[styles.msg, o.status === 'error' && { color: colors.err }]}>{tServer(o.message)}</Text> : null}
                   </View>
                 </Pressable>
                 {isBusy ? (
@@ -210,7 +211,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                 ) : o?.status === 'error' ? (
                   <Pressable onPress={() => publish([p.id])} hitSlop={8} style={styles.inline}>
                     <RotateCcw size={15} color={colors.warm} />
-                    <Text style={styles.retry}>Riprova</Text>
+                    <Text style={styles.retry}>{t('Riprova')}</Text>
                   </Pressable>
                 ) : linking === p.id ? (
                   <Badge text="collego…" tone="accent" />
@@ -221,10 +222,10 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
                 ) : (
                   <Pressable onPress={() => connect(p.id)} hitSlop={8} style={styles.inline}>
                     <Link2 size={15} color={colors.textDim} />
-                    <Text style={styles.link}>Collega</Text>
+                    <Text style={styles.link}>{t('Collega')}</Text>
                   </Pressable>
                 )}
-                <Pressable onPress={() => setOpen(open === p.id ? null : p.id)} hitSlop={10} accessibilityLabel={`Impostazioni ${p.label}`}>
+                <Pressable onPress={() => setOpen(open === p.id ? null : p.id)} hitSlop={10} accessibilityLabel={`${t('Impostazioni')} ${p.label}`}>
                   {open === p.id ? <ChevronUp size={18} color={colors.textDim} /> : <ChevronDown size={18} color={colors.textDim} />}
                 </Pressable>
               </View>
@@ -234,7 +235,7 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           })}
         </View>
         <Text style={styles.hint}>
-          Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell'app e si chiude da solo. Tieni premuto "collegato" per scollegare. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l account TikTok impostato su privato.
+          {t('Tocca la freccia accanto a un social per le sue impostazioni (pubblico/privato, commenti...). Tocca "Collega": il login si apre qui nell\'app e si chiude da solo. Tieni premuto "collegato" per scollegare. TikTok pubblica subito il video come privato (solo tu lo vedi): serve l\'account TikTok impostato su privato.')}
         </Text>
 
         {error && (
@@ -244,10 +245,16 @@ export default function PublishScreen({ project, onBack, onHome, onModify, updat
           </View>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 24 }}>
-          <Btn label="Home" variant="ghost" onPress={onHome} style={{ flex: 1 }} />
+        {/* Il pulsante dice sempre "Pubblica": quanti social sono scelti si legge qui sopra. */}
+        <Text style={styles.pendingLine}>
+          {pending.length
+            ? (pending.length === 1 ? t('1 social selezionato') : t('{n} social selezionati', { n: pending.length }))
+            : t('Nessun social da pubblicare')}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+          <Btn label={t('Home')} variant="ghost" onPress={onHome} style={{ flex: 1 }} />
           <Btn
-            label={pending.length ? `Pubblica (${pending.length})` : 'Pubblicato'}
+            label={t('Pubblica')}
             icon={<Send size={17} color={colors.onAccent} />}
             onPress={() => publish(pending)}
             loading={busy.length > 0}
@@ -279,6 +286,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tagLockedText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  pendingLine: { color: colors.textDim, fontSize: 12.5, textAlign: 'center', marginTop: 20 },
   captionBox: {
     backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
     padding: 14, gap: 6, marginTop: 4,

@@ -19,6 +19,7 @@ import { setHistoryUser, upsertProject } from './src/services/history';
 import { accountsEnabled, getSession, onSessionChange } from './src/services/auth';
 import type { Project } from './src/types';
 import { colors } from './src/theme';
+import { useLanguage } from './src/services/language';
 
 type Route =
   | { name: 'home' }
@@ -42,6 +43,8 @@ export default function App() {
   const current = stack[stack.length - 1];
   // Font dei titoli (stile Neon); finché non sono caricati si vede solo lo sfondo.
   const [fontsReady] = useFonts({ SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold });
+  // Cambiando lingua tutta l'app si ridisegna subito con i testi tradotti (vedi src/i18n).
+  useLanguage();
 
   const push = useCallback((r: Route) => {
     fade.setValue(0);

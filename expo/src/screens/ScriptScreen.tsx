@@ -9,6 +9,7 @@ import { colors, radius } from '../theme';
 import { generateScript, rewriteScript } from '../services/api';
 import { upsertProject } from '../services/history';
 import type { Project } from '../types';
+import { t, tServer } from '../i18n';
 
 export default function ScriptScreen({ project, onBack, onRecord, onUpload, update }: {
   project: Project;
@@ -38,7 +39,7 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
   const fromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permesso negato', 'Consenti l\'accesso alle foto dalle Impostazioni per scegliere un video.');
+      Alert.alert(t('Permesso negato'), t('Consenti l\'accesso alle foto dalle Impostazioni per scegliere un video.'));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -52,10 +53,10 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
     const res = await DocumentPicker.getDocumentAsync({ type: 'video/*', copyToCacheDirectory: true });
     if (!res.canceled && res.assets[0]) onUpload(draft, res.assets[0].uri);
   };
-  const upload = () => Alert.alert('Carica un video', 'Da dove lo prendi?', [
-    { text: 'Galleria', onPress: fromGallery },
-    { text: 'File', onPress: fromFiles },
-    { text: 'Annulla', style: 'cancel' },
+  const upload = () => Alert.alert(t('Carica un video'), t('Da dove lo prendi?'), [
+    { text: t('Galleria'), onPress: fromGallery },
+    { text: t('File'), onPress: fromFiles },
+    { text: t('Annulla'), style: 'cancel' },
   ]);
 
   const regenerate = async () => {
@@ -64,7 +65,7 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
       const fresh = await generateScript(draft);
       mutate({ scriptResult: fresh });
     } catch (e) {
-      Alert.alert('Rigenerazione non riuscita', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Rigenerazione non riuscita'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setRegenerating(false);
     }
@@ -80,7 +81,7 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
       mutate({ scriptResult: fresh });
       if (label === 'ask') setAsk('');
     } catch (e) {
-      Alert.alert('Modifica non riuscita', e instanceof Error ? e.message : 'Riprova.');
+      Alert.alert(t('Modifica non riuscita'), e instanceof Error ? tServer(e.message) : t('Riprova.'));
     } finally {
       setRewriting(null);
     }
@@ -98,26 +99,26 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
 
   return (
     <Screen>
-      <Header title="Il tuo script" subtitle="Leggilo ad alta voce: deve suonare naturale" onBack={onBack} />
+      <Header title={t('Il tuo script')} subtitle={t('Leggilo ad alta voce: deve suonare naturale')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-        <Field label="Titolo proposto">
+        <Field label={t('Titolo proposto')}>
           <Input value={sr.title} onChangeText={(t) => mutate({ scriptResult: { ...sr, title: t } })} />
         </Field>
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
             <Text style={styles.statNum}>{words}</Text>
-            <Text style={styles.statLabel}>parole</Text>
+            <Text style={styles.statLabel}>{t('parole')}</Text>
           </View>
           <View style={styles.stat}>
             <Text style={[styles.statNum, { color: Math.abs(readingSec - draft.duration) > 25 ? colors.warm : colors.ok }]}>
               ~{readingSec}s
             </Text>
-            <Text style={styles.statLabel}>lettura / {draft.duration}s</Text>
+            <Text style={styles.statLabel}>{t('lettura / {n}s', { n: draft.duration })}</Text>
           </View>
         </View>
 
-        <Field label="Script" hint="Tocca per modificare: cancella le frasi che ti vengono difficili.">
+        <Field label={t('Script')} hint={t('Tocca per modificare: cancella le frasi che ti vengono difficili.')}>
           <TextArea
             value={sr.script}
             onChangeText={(s) => mutate({ scriptResult: { ...sr, script: s } })}
@@ -125,7 +126,7 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
           />
         </Field>
 
-        <Text style={styles.section}>Modifica con l'IA</Text>
+        <Text style={styles.section}>{t('Modifica con l\'IA')}</Text>
         <View style={styles.chips}>
           {QUICK.map((q) => (
             <Pressable
@@ -135,13 +136,13 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
               style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }, rewriting && rewriting !== q.label && { opacity: 0.4 }]}
             >
               {rewriting === q.label ? <ActivityIndicator size="small" color={colors.accent} /> : null}
-              <Text style={styles.chipText}>{q.label}</Text>
+              <Text style={styles.chipText}>{t(q.label)}</Text>
             </Pressable>
           ))}
           {history.length > 0 && (
             <Pressable onPress={undo} disabled={!!rewriting} style={[styles.chip, { borderColor: colors.warm }]}>
               <Undo2 size={14} color={colors.warm} />
-              <Text style={[styles.chipText, { color: colors.warm }]}>Annulla</Text>
+              <Text style={[styles.chipText, { color: colors.warm }]}>{t('Annulla')}</Text>
             </Pressable>
           )}
         </View>
@@ -149,7 +150,7 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
           <Input
             value={ask}
             onChangeText={setAsk}
-            placeholder="Es. aggiungi una battuta sul caffè"
+            placeholder={t('Es. aggiungi una battuta sul caffè')}
             style={{ flex: 1, height: 48 }}
             returnKeyType="send"
             onSubmitEditing={() => ask.trim().length > 1 && rewrite(ask.trim(), 'ask')}
@@ -163,10 +164,10 @@ export default function ScriptScreen({ project, onBack, onRecord, onUpload, upda
           </Pressable>
         </View>
 
-        <Btn label="Registra" icon={<Mic size={18} color={colors.onAccent} />} onPress={() => onRecord(draft)} />
+        <Btn label={t('Registra')} icon={<Mic size={18} color={colors.onAccent} />} onPress={() => onRecord(draft)} />
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-          <Btn label="Carica video" variant="ghost" icon={<FolderOpen size={17} color={colors.text} />} onPress={upload} style={{ flex: 1 }} />
-          <Btn label="Rigenera" variant="ghost" icon={<RefreshCw size={17} color={colors.text} />} onPress={regenerate} loading={regenerating} style={{ flex: 1 }} />
+          <Btn label={t('Carica video')} variant="ghost" icon={<FolderOpen size={17} color={colors.text} />} onPress={upload} style={{ flex: 1 }} />
+          <Btn label={t('Rigenera')} variant="ghost" icon={<RefreshCw size={17} color={colors.text} />} onPress={regenerate} loading={regenerating} style={{ flex: 1 }} />
         </View>
       </ScrollView>
     </Screen>

@@ -3,42 +3,41 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  AlertTriangle, Check, CheckCircle2, Eye, ImagePlus, Info, Minus, Move, Pause, Play, Plus, Sparkles, Trash2, Type as TypeIcon,
+  AlertTriangle, Ban, Check, CheckCircle2, Eye, ImagePlus, Info, Pause, Play, Plus, Scissors, Sparkles, Trash2, Type as TypeIcon,
   Volume2, VolumeX, Wand2,
 } from 'lucide-react-native';
 import { Badge, Btn, ChipRow, Header, Input, ProgressBar, Screen, TextArea } from '../components/ui';
-import { RangeBar, VideoTimeline, fmt } from '../components/Timeline';
+import { RangeBar, SeekBar, fmt } from '../components/Timeline';
 import { TEXT_COLORS } from '../lib/textColors';
 import { colors, fonts, radius } from '../theme';
 import { aiEdit, getJob, jobMediaSource, renderEdit, uploadMedia } from '../services/api';
-import LivePreview, { overlayLook } from '../components/LivePreview';
-import { overlayBox } from '../lib/stickerLayout';
+import LivePreview, { overlayLook, type Selection, type Transform } from '../components/LivePreview';
 import { upsertProject } from '../services/history';
+import { getLanguage } from '../services/language';
+import { t, tServer } from '../i18n';
 import type { EditSpec, Job, OverlayItem, Project, TextItem } from '../types';
 
 type SubStyle = NonNullable<EditSpec['subStyle']>;
 const SUB_DEFAULT: SubStyle = { size: 'medium' };
 const EMPTY: EditSpec = { trimStart: 0, trimEnd: 0, subtitles: true, subStyle: SUB_DEFAULT, texts: [], overlays: [], stickers: [] };
 
-const POSITIONS = { Alto: 'top', Centro: 'center', Basso: 'bottom' } as const;
-const SIZES = { Piccolo: 'small', Medio: 'medium', Grande: 'large' } as const;
-const MODES = { 'Schermo intero': 'full', Riquadro: 'pip' } as const;
-const PIP_POS = { 'Alto sx': 'top-left', 'Alto dx': 'top-right', Centro: 'center', 'Basso sx': 'bottom-left', 'Basso dx': 'bottom-right' } as const;
-const SUB_SIZES = { Piccoli: 'small', Medi: 'medium', Grandi: 'large' } as const;
-const labelOf = <T extends string>(map: Record<string, T>, v: T) =>
-  Object.keys(map).find((k) => map[k] === v) as string;
-
 const round1 = (n: number) => Math.round(n * 10) / 10;
+const newId = (p: string) => `${p}${Date.now().toString(36).slice(-5)}`;
 
-/** Palette di colori: un tocco e si vede subito nell'anteprima. */
-function ColorPicker({ value, onChange }: { value?: string; onChange: (hex: string) => void }) {
-  const cur = (value ?? '#FFFFFF').toUpperCase();
+/** Palette di colori: un tocco e si vede subito nell'anteprima. Con `none` c'è anche "nessuno". */
+function ColorPicker({ value, onChange, none }: { value?: string; onChange: (hex: string | undefined) => void; none?: boolean }) {
+  const cur = value?.toUpperCase() ?? (none ? undefined : '#FFFFFF');
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colors}>
+      {none && (
+        <Pressable onPress={() => onChange(undefined)} hitSlop={4} accessibilityLabel={t('Nessuno')} style={[styles.swatchRing, !cur && { borderColor: colors.accent }]}>
+          <View style={[styles.swatch, { backgroundColor: colors.surfaceAlt }]}><Ban size={14} color={colors.textDim} /></View>
+        </Pressable>
+      )}
       {TEXT_COLORS.map((c) => {
         const on = c.hex === cur;
         return (
-          <Pressable key={c.hex} onPress={() => onChange(c.hex)} hitSlop={4} accessibilityLabel={c.name} style={[styles.swatchRing, on && { borderColor: colors.accent }]}>
+          <Pressable key={c.hex} onPress={() => onChange(c.hex)} hitSlop={4} accessibilityLabel={t(c.name)} style={[styles.swatchRing, on && { borderColor: colors.accent }]}>
             <View style={[styles.swatch, { backgroundColor: c.hex }]}>
               {on && <Check size={14} color={c.hex === '#FFFFFF' || c.hex === '#FFD42B' ? '#000' : '#fff'} />}
             </View>
@@ -49,20 +48,24 @@ function ColorPicker({ value, onChange }: { value?: string; onChange: (hex: stri
   );
 }
 
-/** Tasto "Sposta" / "Fatto": blocca l'anteprima sull'elemento per trascinarlo. */
-function MoveButton({ on, onPress }: { on: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.moveBtn, on && styles.moveBtnOn, pressed && { opacity: 0.8 }]}>
-      {on ? <Check size={15} color={colors.onAccent} /> : <Move size={15} color={colors.text} />}
-      <Text style={[styles.moveText, on && { color: colors.onAccent }]}>{on ? 'Fatto' : 'Sposta'}</Text>
-    </Pressable>
-  );
+/** Il primo elemento aggiunto o cambiato dall'IA: lì si porta l'anteprima per farlo vedere subito. */
+function firstChange(before: EditSpec, after: EditSpec): { sel: NonNullable<Selection>; start: number } | null {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const found: { sel: NonNullable<Selection>; start: number }[] = [];
+  for (const x of after.texts) {
+    if (!same(x, before.texts.find((y) => y.id === x.id))) found.push({ sel: { kind: 'text', id: x.id }, start: x.start });
+  }
+  for (const o of after.overlays) {
+    if (!same(o, before.overlays.find((y) => y.id === o.id))) found.push({ sel: { kind: 'overlay', id: o.id }, start: o.start });
+  }
+  if (!same(after.subStyle, before.subStyle) && after.subtitles) found.push({ sel: { kind: 'sub', id: 'sub' }, start: -1 });
+  found.sort((a, b) => a.start - b.start);
+  return found[0] ?? null;
 }
-const newId = (p: string) => `${p}${Date.now().toString(36).slice(-5)}`;
 
 // Modifiche dopo il primo montaggio: testi a schermo, foto/video della galleria, sottotitoli,
-// taglio di inizio/fine sulla timeline e istruzioni libere all'IA. Ogni modifica si vede
-// subito nell'anteprima live; il backend rifà l'export solo premendo "Applica modifiche".
+// taglio di inizio/fine e istruzioni libere all'IA. Gli elementi si toccano, spostano e
+// ingrandiscono direttamente nell'anteprima; il backend rifà l'export solo con "Applica modifiche".
 export default function ModifyScreen({ project, onBack, onDone }: {
   project: Project;
   onBack: () => void;
@@ -80,25 +83,31 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopRef = useRef(false);
-  const [moving, setMoving] = useState<string | null>(null); // foto che si sta spostando a mano
-  const [movingText, setMovingText] = useState<string | null>(null); // testo che si sta spostando a mano
+  const [selected, setSelected] = useState<Selection>(null);
   const [dragging, setDragging] = useState(false);
+  // Ultima spec e numero dell'ultima richiesta all'IA: una risposta vecchia non sovrascrive quelle nuove.
+  const specRef = useRef(spec);
+  specRef.current = spec;
+  const aiSeq = useRef(0);
 
   const previewSrc = job?.previewUrl ?? null;
   const previewPlayer = useVideoPlayer(previewSrc ? { uri: previewSrc } : null, (p) => { p.loop = true; p.play(); });
-  // Posizione della testina sulla timeline (secondi del video originale).
+  // Posizione della testina (secondi del video originale).
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(true);
   useEffect(() => {
     const id = setInterval(() => setTime(previewPlayer.currentTime ?? 0), 120);
     return () => clearInterval(id);
   }, [previewPlayer]);
-  const seek = (t: number) => { previewPlayer.pause(); setPlaying(false); previewPlayer.currentTime = t; setTime(t); };
+  const pause = () => { previewPlayer.pause(); setPlaying(false); };
+  const seek = (tt: number) => { pause(); previewPlayer.currentTime = tt; setTime(tt); };
   const togglePlay = () => {
-    if (playing) { previewPlayer.pause(); setPlaying(false); } else { setMoving(null); setMovingText(null); previewPlayer.play(); setPlaying(true); }
+    if (playing) pause();
+    else { setSelected(null); previewPlayer.play(); setPlaying(true); }
   };
-  // Audio originale: si sente (o no) già nell'anteprima, e così sarà nel video finale.
-  useEffect(() => { previewPlayer.muted = !!spec.muted; }, [previewPlayer, spec.muted]);
+  // Muto solo nell'anteprima: il video esportato tiene sempre il suo audio.
+  const [previewMuted, setPreviewMuted] = useState(false);
+  useEffect(() => { previewPlayer.muted = previewMuted; }, [previewPlayer, previewMuted]);
 
   // Stato iniziale dal backend (spec attuale e media già caricati).
   useEffect(() => {
@@ -107,7 +116,7 @@ export default function ModifyScreen({ project, onBack, onDone }: {
       const s = { ...EMPTY, ...(j.spec ?? {}), subStyle: j.spec?.subStyle ?? SUB_DEFAULT, stickers: j.spec?.stickers ?? [] };
       setSpec(s);
       setApplied(s);
-    }).catch((e) => setError(e instanceof Error ? e.message : 'Backend non raggiungibile.'));
+    }).catch((e) => setError(e instanceof Error ? tServer(e.message) : t('Backend non raggiungibile.')));
     return () => { stopRef.current = true; };
   }, [jobId]);
 
@@ -117,44 +126,61 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   const dirty = JSON.stringify(spec) !== JSON.stringify(applied);
 
   const patchText = (id: string, p: Partial<TextItem>) =>
-    setSpec((s) => ({ ...s, texts: s.texts.map((t) => (t.id === id ? { ...t, ...p } : t)) }));
+    setSpec((s) => ({ ...s, texts: s.texts.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
   const patchOverlay = (id: string, p: Partial<OverlayItem>) =>
     setSpec((s) => ({ ...s, overlays: s.overlays.map((o) => (o.id === id ? { ...o, ...p } : o)) }));
-  // "Sposta": ferma l'anteprima nel momento della foto, così resta visibile mentre la trascini.
-  const toggleMove = (o: OverlayItem) => {
-    if (moving === o.id) { setMoving(null); previewPlayer.play(); setPlaying(true); return; }
-    previewPlayer.pause();
-    setPlaying(false);
-    previewPlayer.currentTime = spec.trimStart + o.start + Math.min(0.3, (o.end - o.start) / 2);
-    setMovingText(null);
-    setMoving(o.id);
+
+  // Selezione: ferma l'anteprima e la porta nel momento dell'elemento, così resta visibile.
+  const select = (sel: Selection, start?: number) => {
+    setSelected(sel);
+    if (!sel) return;
+    pause();
+    if (start != null && start >= 0) {
+      const tt = specRef.current.trimStart + start + 0.3;
+      previewPlayer.currentTime = tt;
+      setTime(tt);
+    }
   };
-  const toggleMoveText = (t: TextItem) => {
-    if (movingText === t.id) { setMovingText(null); previewPlayer.play(); setPlaying(true); return; }
-    previewPlayer.pause();
-    setPlaying(false);
-    previewPlayer.currentTime = spec.trimStart + t.start + Math.min(0.3, (t.end - t.start) / 2);
-    setMoving(null);
-    setMovingText(t.id);
+  const isSel = (kind: NonNullable<Selection>['kind'], id: string) => selected?.kind === kind && selected.id === id;
+
+  // Fine di un gesto nell'anteprima: salva posizione e grandezza.
+  const transform = (sel: NonNullable<Selection>, tr: Transform) => {
+    if (sel.kind === 'overlay') {
+      const o = specRef.current.overlays.find((x) => x.id === sel.id);
+      const m = job?.media?.find((x) => x.id === o?.mediaId);
+      // Una foto a schermo intero diventa una foto intera libera, che si sposta e si ridimensiona.
+      const full = o && overlayLook(o, m).aspect == null;
+      patchOverlay(sel.id, { x: tr.x, y: tr.y, w: tr.w, ...(full ? { mode: 'pip' as const, cutout: false } : {}) });
+    } else if (sel.kind === 'text') {
+      patchText(sel.id, { x: tr.x, y: tr.y, fs: tr.fs });
+    } else {
+      setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), x: tr.x, y: tr.y, fs: tr.fs } }));
+    }
   };
-  const resize = (o: OverlayItem, factor: number) => {
-    const m = job?.media?.find((x) => x.id === o.mediaId);
-    const look = overlayLook(o, m);
-    if (look.aspect == null) return;
-    const b = overlayBox(o, look.aspect);
-    // Tiene fermo il centro: se la foto era in un angolo, da ora ha una posizione libera.
-    patchOverlay(o.id, {
-      w: Math.round(Math.max(160, Math.min(1080, b.w * factor))),
-      x: Math.round(b.left + b.w / 2),
-      y: Math.round(b.top + b.h / 2),
-    });
-  };
+
   const addText = () => {
     const start = now();
+    const id = newId('t');
+    // Di default: testo nero su riquadro bianco, in alto al centro (lontano dai sottotitoli).
     setSpec((s) => ({
       ...s,
-      texts: [...s.texts, { id: newId('t'), text: '', start, end: round1(Math.min(start + 3, finalLen)), position: 'top', size: 'medium' }],
+      texts: [...s.texts, {
+        id, text: '', start, end: round1(Math.min(start + 3, finalLen)),
+        position: 'top', size: 'medium', x: 540, y: 560, fs: 64, color: '#000000', bg: '#FFFFFF',
+      }],
     }));
+    select({ kind: 'text', id }, start);
+  };
+
+  // Risposta dell'IA: si applica solo se è l'ultima chiesta, e si mostra subito nell'anteprima.
+  const applyAi = (seq: number, before: EditSpec, out: Awaited<ReturnType<typeof aiEdit>>) => {
+    if (seq !== aiSeq.current) return false;
+    const next = { ...out.spec, subStyle: out.spec.subStyle ?? before.subStyle ?? SUB_DEFAULT };
+    setSpec(next);
+    if (out.media) setJob((j) => (j ? { ...j, media: out.media } : j));
+    const ch = firstChange(before, next);
+    if (ch) select(ch.sel, ch.start);
+    return true;
   };
 
   const addMedia = async () => {
@@ -180,25 +206,28 @@ export default function ModifyScreen({ project, onBack, onDone }: {
       setUploadPct(null);
       // L'IA sceglie momento, durata, schermo intero o riquadro guardando cosa dici nel video.
       setAiBusy(true);
+      const seq = ++aiSeq.current;
+      const before = specRef.current;
       try {
         const cut = media.cutout ? ' La foto è già scontornata (senza sfondo): usala con "cutout": true come elemento sopra il video.' : '';
-        const out = await aiEdit(jobId, `Inserisci il nuovo media "${media.id}" (${media.kind}, "${media.name}") nel punto più adatto in base alla trascrizione, con durata, modalità, grandezza e posizione ottimali.${cut} Non cambiare nient'altro.`, spec);
-        setSpec(out.spec);
-        setAiSummary(`${out.summary} Guarda l'anteprima: con "Sposta" la trascini e con due dita cambi la grandezza. Poi premi Applica modifiche.`);
+        const out = await aiEdit(jobId, `Inserisci il nuovo media "${media.id}" (${media.kind}, "${media.name}") nel punto più adatto in base alla trascrizione, con durata, modalità, grandezza e posizione ottimali.${cut} Non cambiare nient'altro.`, before, getLanguage());
+        if (applyAi(seq, before, out)) setAiSummary(`${out.summary} ${t('Toccala nell\'anteprima per spostarla e ingrandirla, poi premi Applica modifiche.')}`);
       } catch {
         const start = now();
         const len = media.kind === 'video' && media.duration ? Math.min(media.duration, 5) : 3;
+        const id = newId('o');
         setSpec((s) => ({
           ...s,
           overlays: [...s.overlays, media.cutout
-            ? { id: newId('o'), mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'pip', position: 'bottom-right', w: 560, cutout: true }
-            : { id: newId('o'), mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'full' }],
+            ? { id, mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'pip', position: 'bottom-right', w: 560, cutout: true }
+            : { id, mediaId: media.id, start, end: round1(Math.min(start + len, finalLen)), mode: 'full' }],
         }));
+        select({ kind: 'overlay', id }, start);
       } finally {
         setAiBusy(false);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Caricamento non riuscito.');
+      setError(e instanceof Error ? tServer(e.message) : t('Caricamento non riuscito.'));
     } finally {
       setUploadPct(null);
     }
@@ -207,11 +236,10 @@ export default function ModifyScreen({ project, onBack, onDone }: {
   // Export con le modifiche e polling finché non è pronto.
   const render = async (next: EditSpec) => {
     setError(null);
-    setMoving(null);
-    setMovingText(null);
+    setSelected(null);
     setRendering(true);
     try {
-      await renderEdit(jobId, { ...next, texts: next.texts.filter((t) => t.text.trim()) });
+      await renderEdit(jobId, { ...next, texts: next.texts.filter((x) => x.text.trim()) });
       while (!stopRef.current) {
         await new Promise((r) => setTimeout(r, 3000));
         const j = await getJob(jobId).catch(() => null);
@@ -223,10 +251,10 @@ export default function ModifyScreen({ project, onBack, onDone }: {
           upsertProject(p);
           break;
         }
-        if (j.stage === 'error') { setError(j.message ?? 'Export non riuscito.'); break; }
+        if (j.stage === 'error') { setError(j.message ? tServer(j.message) : t('Export non riuscito.')); break; }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Export non riuscito.');
+      setError(e instanceof Error ? tServer(e.message) : t('Export non riuscito.'));
     } finally {
       setRendering(false);
     }
@@ -238,26 +266,29 @@ export default function ModifyScreen({ project, onBack, onDone }: {
     setAiSummary(null);
     setAiNotes(null);
     setAiBusy(true);
+    const seq = ++aiSeq.current;
+    const before = specRef.current;
     try {
-      const out = await aiEdit(jobId, instruction.trim(), spec);
-      setSpec({ ...out.spec, subStyle: out.spec.subStyle ?? spec.subStyle ?? SUB_DEFAULT });
-      if (out.media) setJob((j) => (j ? { ...j, media: out.media } : j));
-      setAiSummary(`${out.summary} È solo un'anteprima: premi Applica modifiche per salvarla nel video.`);
-      setAiNotes(out.notes ?? null);
-      setInstruction('');
+      const out = await aiEdit(jobId, instruction.trim(), before, getLanguage());
+      if (applyAi(seq, before, out)) {
+        setAiSummary(`${out.summary} ${t('È solo un\'anteprima: premi Applica modifiche per salvarla nel video.')}`);
+        setAiNotes(out.notes ?? null);
+        setInstruction('');
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'L IA non ha risposto.');
+      if (seq === aiSeq.current) setError(e instanceof Error ? tServer(e.message) : t('L\'IA non ha risposto.'));
     } finally {
-      setAiBusy(false);
+      if (seq === aiSeq.current) setAiBusy(false);
     }
   };
 
   const busy = rendering || aiBusy || uploadPct !== null;
-  const mediaName = (id: string) => job?.media?.find((m) => m.id === id);
+  const mediaOf = (id: string) => job?.media?.find((m) => m.id === id);
+  const ss = spec.subStyle ?? SUB_DEFAULT;
 
   return (
     <Screen>
-      <Header title="Modifica il video" subtitle="Testi, foto e video, o chiedi all'IA" onBack={onBack} />
+      <Header title={t('Modifica il video')} subtitle={t('Tocca un elemento nell\'anteprima per spostarlo')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging}>
         {previewSrc ? (
           <LivePreview
@@ -267,62 +298,72 @@ export default function ModifyScreen({ project, onBack, onDone }: {
             media={job?.media ?? []}
             duration={job?.duration ?? 0}
             mediaUri={(id, cut) => jobMediaSource(jobId, id, cut)}
-            selectedId={moving}
-            onMoveOverlay={(id, x, y, w) => patchOverlay(id, { x, y, w })}
-            selectedTextId={movingText}
-            onMoveText={(id, x, y) => patchText(id, { x, y })}
+            selected={selected}
+            onSelect={(sel) => select(sel)}
+            onTransform={transform}
             onDrag={setDragging}
           />
         ) : null}
-        {/* Timeline: scorri il video e trascina le maniglie rosa per tagliare inizio e fine. */}
+        <Text style={styles.previewHint}>
+          {selected
+            ? t('Trascina per spostare · maniglie o due dita per ingrandire · tocca fuori per deselezionare')
+            : t('Tocca foto, testi o sottotitoli nell\'anteprima per spostarli e ingrandirli')}
+        </Text>
+
+        {/* Riproduzione: play, tempo, audio dell'anteprima e barra classica; sotto, il taglio. */}
         {job?.duration ? (
           <View style={styles.player}>
             <View style={styles.playerRow}>
               <Pressable
                 onPress={togglePlay}
                 hitSlop={6}
-                accessibilityLabel={playing ? 'Pausa' : 'Riproduci'}
+                accessibilityLabel={playing ? t('Pausa') : t('Riproduci')}
                 style={({ pressed }) => [styles.playBtn, pressed && { transform: [{ scale: 0.94 }] }]}
               >
                 {playing
                   ? <Pause size={20} color={colors.onAccent} fill={colors.onAccent} />
                   : <Play size={20} color={colors.onAccent} fill={colors.onAccent} style={{ marginLeft: 2 }} />}
               </Pressable>
-              <Text style={styles.playerTime}>
-                {fmt(Math.max(0, time - spec.trimStart))}
-                <Text style={{ color: colors.textDim }}> / {fmt(finalLen)}</Text>
-              </Text>
-              <View style={{ flex: 1 }} />
+              <View style={{ flex: 1 }}>
+                <SeekBar
+                  duration={finalLen}
+                  time={Math.max(0, time - spec.trimStart)}
+                  onSeek={(tt) => seek(spec.trimStart + tt)}
+                  onDrag={setDragging}
+                />
+              </View>
               <Pressable
-                onPress={() => setSpec((s) => ({ ...s, muted: !s.muted }))}
-                hitSlop={6}
-                accessibilityLabel={spec.muted ? 'Riattiva audio' : 'Togli audio'}
-                style={[styles.muteBtn, spec.muted && styles.muteOn]}
+                onPress={() => setPreviewMuted((m) => !m)}
+                hitSlop={8}
+                accessibilityLabel={previewMuted ? t('Riattiva audio') : t('Silenzia anteprima')}
+                style={[styles.muteBtn, previewMuted && styles.muteOn]}
               >
-                {spec.muted ? <VolumeX size={17} color={colors.accent} /> : <Volume2 size={17} color={colors.text} />}
-                <Text style={[styles.muteText, spec.muted && { color: colors.accent }]}>{spec.muted ? 'Audio tolto' : 'Audio'}</Text>
+                {previewMuted ? <VolumeX size={18} color={colors.accent} /> : <Volume2 size={18} color={colors.text} />}
               </Pressable>
             </View>
-            <VideoTimeline
-              duration={job.duration}
-              trimStart={spec.trimStart}
-              trimEnd={spec.trimEnd}
-              time={time}
-              onSeek={seek}
-              onTrim={(p) => setSpec((s) => ({ ...s, ...p }))}
+            <View style={styles.trimHead}>
+              <Scissors size={14} color={colors.textDim} />
+              <Text style={styles.trimLabel}>{t('Parte da tenere')}</Text>
+              <Text style={styles.trimLen}>{fmt(finalLen)}</Text>
+            </View>
+            <RangeBar
+              total={job.duration}
+              start={spec.trimStart}
+              end={job.duration - spec.trimEnd}
+              onChange={(p) => setSpec((s) => ({ ...s, trimStart: round1(p.start), trimEnd: round1(Math.max(0, job.duration! - p.end)) }))}
               onDrag={setDragging}
             />
           </View>
         ) : null}
         <View style={{ alignItems: 'center', marginBottom: 12 }}>
           {dirty && (
-            <View style={styles.dirtyRow}><Eye size={13} color={colors.warm} /><Text style={styles.dirtyText}>Modifiche non ancora applicate</Text></View>
+            <View style={styles.dirtyRow}><Eye size={13} color={colors.warm} /><Text style={styles.dirtyText}>{t('Modifiche non ancora applicate')}</Text></View>
           )}
         </View>
 
         {rendering && (
           <View style={styles.renderBox}>
-            <Text style={styles.renderText}>{job?.message ?? 'Applico le modifiche…'}</Text>
+            <Text style={styles.renderText}>{job?.message ? tServer(job.message) : t('Applico le modifiche…')}</Text>
             <ProgressBar pct={Math.round((job?.progress ?? 0.1) * 100)} />
           </View>
         )}
@@ -346,16 +387,16 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         )}
 
         {/* IA */}
-        <Text style={styles.section}>Chiedi all'IA</Text>
+        <Text style={styles.section}>{t('Chiedi all\'IA')}</Text>
         <TextArea
           value={instruction}
           onChangeText={setInstruction}
-          placeholder={'Es. "metti il tasto segui al secondo 3", "una foto della Torre Eiffel quando la nomino", "togli i primi 2 secondi"'}
+          placeholder={t('Es. "metti il tasto segui al secondo 3", "una foto della Torre Eiffel quando la nomino", "togli i primi 2 secondi"')}
           maxLength={1000}
           style={{ minHeight: 90 }}
         />
         <Btn
-          label="Applica con l'IA"
+          label={t('Applica con l\'IA')}
           variant="warm"
           icon={<Sparkles size={17} color={colors.onWarm} />}
           onPress={askAi}
@@ -365,134 +406,119 @@ export default function ModifyScreen({ project, onBack, onDone }: {
         />
 
         {/* Testi */}
-        <Text style={styles.section}>Testi a schermo</Text>
-        {spec.texts.map((t) => (
-          <View key={t.id} style={styles.card}>
+        <Text style={styles.section}>{t('Testi a schermo')}</Text>
+        {spec.texts.map((x) => (
+          <View key={x.id} style={[styles.card, isSel('text', x.id) && styles.cardOn]}>
             <View style={styles.cardHead}>
-              <TypeIcon size={16} color={colors.textDim} />
+              <Pressable hitSlop={8} onPress={() => select({ kind: 'text', id: x.id }, x.start)}>
+                <TypeIcon size={16} color={isSel('text', x.id) ? colors.accent : colors.textDim} />
+              </Pressable>
               <Input
-                value={t.text}
-                onChangeText={(v) => patchText(t.id, { text: v })}
-                placeholder="Scrivi il testo"
+                value={x.text}
+                onChangeText={(v) => patchText(x.id, { text: v })}
+                onFocus={() => select({ kind: 'text', id: x.id }, x.start)}
+                placeholder={t('Scrivi il testo')}
                 maxLength={200}
                 style={{ flex: 1, height: 44 }}
               />
-              <Pressable hitSlop={10} onPress={() => setSpec((s) => ({ ...s, texts: s.texts.filter((x) => x.id !== t.id) }))}>
+              <Pressable hitSlop={10} onPress={() => { setSpec((s) => ({ ...s, texts: s.texts.filter((y) => y.id !== x.id) })); if (isSel('text', x.id)) setSelected(null); }}>
                 <Trash2 size={18} color={colors.err} />
               </Pressable>
             </View>
-            <RangeBar total={finalLen} start={t.start} end={t.end} onChange={(p) => patchText(t.id, p)} onDrag={setDragging} color={colors.accent2} />
-            <ChipRow
-              options={Object.keys(POSITIONS)}
-              value={t.x != null ? '' : labelOf(POSITIONS, t.position)}
-              onChange={(v) => patchText(t.id, { position: POSITIONS[v as keyof typeof POSITIONS], x: undefined, y: undefined })}
-            />
-            <View style={{ height: 8 }} />
-            <ChipRow options={Object.keys(SIZES)} value={labelOf(SIZES, t.size)} onChange={(v) => patchText(t.id, { size: SIZES[v as keyof typeof SIZES] })} />
-            <Text style={styles.subLabel}>Colore</Text>
-            <ColorPicker value={t.color} onChange={(hex) => patchText(t.id, { color: hex })} />
-            <View style={styles.moveRow}>
-              <MoveButton on={movingText === t.id} onPress={() => toggleMoveText(t)} />
-              {t.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
-            </View>
-            {movingText === t.id && <Text style={styles.moveHint}>Trascina il testo nell'anteprima: al centro compaiono le linee guida.</Text>}
+            <RangeBar total={finalLen} start={x.start} end={x.end} onChange={(p) => patchText(x.id, p)} onDrag={setDragging} color={colors.accent2} />
+            <Text style={styles.subLabel}>{t('Colore del testo')}</Text>
+            <ColorPicker value={x.color} onChange={(hex) => patchText(x.id, { color: hex })} />
+            <Text style={styles.subLabel}>{t('Riquadro')}</Text>
+            <ColorPicker none value={x.bg} onChange={(hex) => patchText(x.id, { bg: hex })} />
           </View>
         ))}
-        <Btn label="Aggiungi testo" variant="ghost" icon={<Plus size={17} color={colors.text} />} onPress={addText} disabled={busy} />
+        <Btn label={t('Aggiungi testo')} variant="ghost" icon={<Plus size={17} color={colors.text} />} onPress={addText} disabled={busy} />
 
         {/* Media */}
-        <Text style={styles.section}>Foto e video</Text>
+        <Text style={styles.section}>{t('Foto e video')}</Text>
         {spec.overlays.map((o) => {
-          const m = mediaName(o.mediaId);
+          const m = mediaOf(o.mediaId);
+          const full = overlayLook(o, m).aspect == null;
           return (
-            <View key={o.id} style={styles.card}>
-              <View style={styles.cardHead}>
-                <Badge text={m?.kind === 'video' ? 'VIDEO' : 'FOTO'} tone="warm" />
+            <View key={o.id} style={[styles.card, isSel('overlay', o.id) && styles.cardOn]}>
+              <Pressable style={styles.cardHead} onPress={() => select({ kind: 'overlay', id: o.id }, o.start)}>
+                <Badge text={m?.kind === 'video' ? 'VIDEO' : t('FOTO')} tone="warm" />
                 <Text style={styles.mediaName} numberOfLines={1}>{m?.name ?? o.mediaId}</Text>
-                <Pressable hitSlop={10} onPress={() => setSpec((s) => ({ ...s, overlays: s.overlays.filter((x) => x.id !== o.id) }))}>
+                <Pressable hitSlop={10} onPress={() => { setSpec((s) => ({ ...s, overlays: s.overlays.filter((y) => y.id !== o.id) })); if (isSel('overlay', o.id)) setSelected(null); }}>
                   <Trash2 size={18} color={colors.err} />
                 </Pressable>
-              </View>
+              </Pressable>
               <RangeBar total={finalLen} start={o.start} end={o.end} onChange={(p) => patchOverlay(o.id, p)} onDrag={setDragging} color={colors.warm} />
-              <ChipRow options={Object.keys(MODES)} value={labelOf(MODES, o.mode)} onChange={(v) => patchOverlay(o.id, { mode: MODES[v as keyof typeof MODES] })} />
-              {m?.kind === 'image' && m.cutout && (
+              <ChipRow
+                options={[t('Schermo intero'), t('Libera')]}
+                value={full ? t('Schermo intero') : t('Libera')}
+                onChange={(v) => patchOverlay(o.id, v === t('Schermo intero')
+                  ? { mode: 'full', cutout: false, x: undefined, y: undefined, w: undefined }
+                  : { mode: 'pip', x: 540, y: 960, w: 760 })}
+              />
+              {m?.kind === 'image' && m.cutout && !full && (
                 <View style={{ marginTop: 8 }}>
                   <ChipRow
-                    options={['Sfondo tolto', 'Foto intera']}
-                    value={o.cutout === false ? 'Foto intera' : 'Sfondo tolto'}
-                    onChange={(v) => patchOverlay(o.id, { cutout: v === 'Sfondo tolto' })}
+                    options={[t('Sfondo tolto'), t('Foto intera')]}
+                    value={o.cutout === false ? t('Foto intera') : t('Sfondo tolto')}
+                    onChange={(v) => patchOverlay(o.id, { cutout: v === t('Sfondo tolto') })}
                   />
                 </View>
               )}
-              {o.mode === 'pip' && (
-                <View style={{ marginTop: 8 }}>
-                  <ChipRow
-                    options={Object.keys(PIP_POS)}
-                    value={o.x != null ? '' : labelOf(PIP_POS, o.position ?? 'top-right')}
-                    onChange={(v) => patchOverlay(o.id, { position: PIP_POS[v as keyof typeof PIP_POS], x: undefined, y: undefined })}
-                  />
-                </View>
-              )}
-              {overlayLook(o, m).aspect != null && (
-                <View style={styles.moveRow}>
-                  <MoveButton on={moving === o.id} onPress={() => toggleMove(o)} />
-                  <Pressable hitSlop={6} onPress={() => resize(o, 1 / 1.15)} style={styles.sizeBtn}><Minus size={16} color={colors.text} /></Pressable>
-                  <Pressable hitSlop={6} onPress={() => resize(o, 1.15)} style={styles.sizeBtn}><Plus size={16} color={colors.text} /></Pressable>
-                  {o.x != null && <Text style={styles.moveHint}>posizione tua</Text>}
-                </View>
-              )}
-              {moving === o.id && <Text style={styles.moveHint}>Nell'anteprima qui sopra: un dito per spostarla, due dita per allargarla o stringerla. Al centro compaiono le linee guida.</Text>}
             </View>
           );
         })}
         {uploadPct !== null && (
           <View style={{ marginBottom: 10 }}>
-            <Text style={styles.renderText}>Caricamento… {uploadPct}%</Text>
+            <Text style={styles.renderText}>{t('Caricamento… {pct}%', { pct: uploadPct })}</Text>
             <ProgressBar pct={uploadPct} />
           </View>
         )}
-        <Btn label="Aggiungi dalla galleria" variant="ghost" icon={<ImagePlus size={17} color={colors.text} />} onPress={addMedia} disabled={busy} />
+        <Btn label={t('Aggiungi dalla galleria')} variant="ghost" icon={<ImagePlus size={17} color={colors.text} />} onPress={addMedia} disabled={busy} />
 
         {/* Sottotitoli */}
-        <Text style={styles.section}>Sottotitoli</Text>
-        <View style={styles.card}>
-          <ChipRow options={['Sì', 'No']} value={spec.subtitles ? 'Sì' : 'No'} onChange={(v) => setSpec((s) => ({ ...s, subtitles: v === 'Sì' }))} />
+        <Text style={styles.section}>{t('Sottotitoli')}</Text>
+        <View style={[styles.card, isSel('sub', 'sub') && styles.cardOn]}>
+          <ChipRow
+            options={[t('Sì'), t('No')]}
+            value={spec.subtitles ? t('Sì') : t('No')}
+            onChange={(v) => { setSpec((s) => ({ ...s, subtitles: v === t('Sì') })); if (v !== t('Sì') && isSel('sub', 'sub')) setSelected(null); }}
+          />
           {spec.subtitles && (
             <>
-              <Text style={styles.subLabel}>Grandezza</Text>
-              <ChipRow
-                options={Object.keys(SUB_SIZES)}
-                value={labelOf(SUB_SIZES, (spec.subStyle ?? SUB_DEFAULT).size)}
-                onChange={(v) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), size: SUB_SIZES[v as keyof typeof SUB_SIZES] } }))}
-              />
-              <Text style={styles.subLabel}>Colore</Text>
+              <Text style={styles.subLabel}>{t('Colore')}</Text>
               <ColorPicker
-                value={(spec.subStyle ?? SUB_DEFAULT).color}
+                value={ss.color}
                 onChange={(hex) => setSpec((s) => ({ ...s, subStyle: { ...(s.subStyle ?? SUB_DEFAULT), color: hex } }))}
               />
-              <Text style={styles.hintSmall}>Stanno sempre in basso, sopra i tasti di TikTok e Instagram. Il bordo si adatta al colore, così si leggono su qualsiasi sfondo.</Text>
+              <Text style={styles.hintSmall}>{t('Toccali nell\'anteprima per spostarli e ingrandirli. Il bordo si adatta al colore, così si leggono su qualsiasi sfondo.')}</Text>
+              {(ss.x != null || ss.fs != null) && (
+                <Pressable onPress={() => setSpec((s) => ({ ...s, subStyle: { size: 'medium', color: s.subStyle?.color } }))} style={{ marginTop: 8 }}>
+                  <Text style={styles.link}>{t('Rimetti posizione e grandezza di default')}</Text>
+                </Pressable>
+              )}
             </>
           )}
         </View>
-        <Text style={styles.hint}>Sottotitoli e testi restano sempre lontani dai bordi, dove TikTok e Instagram mettono descrizione e pulsanti. Per tagliare l'inizio o la fine trascina le maniglie rosa della timeline sotto il video.</Text>
+        <Text style={styles.hint}>{t('Di default sottotitoli e testi stanno lontani dai bordi, dove TikTok e Instagram mettono descrizione e pulsanti.')}</Text>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
           <Btn
-            label="Fatto"
+            label={t('Fatto')}
             variant="ghost"
             onPress={() => {
               const done = () => onDone({ ...project, finalVideoUrl: job?.finalVideoUrl ?? project.finalVideoUrl });
               if (!dirty) { done(); return; }
-              Alert.alert('Modifiche non applicate', 'Le modifiche che vedi nell anteprima non sono ancora nel video. Vuoi uscire lo stesso?', [
-                { text: 'Resta', style: 'cancel' },
-                { text: 'Esci senza applicare', style: 'destructive', onPress: done },
+              Alert.alert(t('Modifiche non applicate'), t('Le modifiche che vedi nell\'anteprima non sono ancora nel video. Vuoi uscire lo stesso?'), [
+                { text: t('Resta'), style: 'cancel' },
+                { text: t('Esci senza applicare'), style: 'destructive', onPress: done },
               ]);
             }}
             disabled={busy}
             style={{ flex: 1 }}
           />
           <Btn
-            label="Applica modifiche"
+            label={t('Applica modifiche')}
             icon={<Wand2 size={17} color={colors.onAccent} />}
             onPress={() => render(spec)}
             loading={rendering}
@@ -506,42 +532,33 @@ export default function ModifyScreen({ project, onBack, onDone }: {
 }
 
 const styles = StyleSheet.create({
-  moveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
-  moveBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, height: 38, borderRadius: radius.full,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
-  },
-  moveBtnOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  moveText: { color: colors.text, fontFamily: fonts.semibold, fontSize: 13.5 },
+  previewHint: { color: colors.textDim, fontSize: 12, textAlign: 'center', marginTop: -6, marginBottom: 12, paddingHorizontal: 12 },
   colors: { gap: 8, paddingVertical: 2 },
   swatchRing: { padding: 2, borderRadius: 18, borderWidth: 2, borderColor: 'transparent' },
   swatch: {
     width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
   },
-  sizeBtn: {
-    width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt,
-  },
-  moveHint: { color: colors.textDim, fontSize: 12, marginTop: 6 },
   player: {
     backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border,
-    padding: 12, gap: 12, marginBottom: 6,
+    padding: 12, gap: 8, marginBottom: 6,
   },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   playBtn: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent,
     shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 10, shadowOffset: { width: 0, height: 0 },
   },
-  playerTime: { color: colors.text, fontFamily: fonts.semibold, fontSize: 14, fontVariant: ['tabular-nums'] },
   muteBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.full,
+    width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border,
   },
   muteOn: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
-  muteText: { color: colors.text, fontSize: 12.5, fontFamily: fonts.medium },
+  trimHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  trimLabel: { color: colors.textDim, fontSize: 12.5, fontFamily: fonts.medium, flex: 1 },
+  trimLen: { color: colors.text, fontSize: 12.5, fontFamily: fonts.semibold },
   subLabel: { color: colors.textDim, fontSize: 12.5, marginTop: 12, marginBottom: 6 },
-  hintSmall: { color: colors.textDim, fontSize: 11.5, marginTop: 8 },
+  hintSmall: { color: colors.textDim, fontSize: 11.5, marginTop: 8, lineHeight: 16 },
+  link: { color: colors.accent, fontSize: 12.5, fontFamily: fonts.semibold },
   noteBox: {
     flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12,
     backgroundColor: 'rgba(255,214,107,0.1)', borderRadius: radius.md, padding: 12,
@@ -552,6 +569,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
     borderRadius: radius.lg, padding: 14, marginBottom: 10,
   },
+  cardOn: { borderColor: colors.accent },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   mediaName: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '600' },
   hint: { color: colors.textDim, fontSize: 12, marginTop: 8, lineHeight: 17 },
@@ -561,12 +579,12 @@ const styles = StyleSheet.create({
   renderText: { color: colors.textDim, fontSize: 13, marginBottom: 6 },
   okBox: {
     flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12,
-    backgroundColor: 'rgba(124,255,203,0.1)', borderRadius: radius.md, padding: 12,
+    backgroundColor: 'rgba(91,228,155,0.1)', borderRadius: radius.md, padding: 12,
   },
   okText: { color: colors.ok, flex: 1, fontSize: 13.5, lineHeight: 19 },
   errorBox: {
     flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12,
-    backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: radius.md, padding: 12,
+    backgroundColor: 'rgba(255,138,92,0.1)', borderRadius: radius.md, padding: 12,
   },
   errorText: { color: colors.err, flex: 1, fontSize: 13.5, lineHeight: 19 },
 });

@@ -7,6 +7,7 @@ import { colors } from '../theme';
 import { uploadForEdit } from '../services/api';
 import { upsertProject } from '../services/history';
 import type { Project } from '../types';
+import { t, tServer } from '../i18n';
 
 // Revisione del video grezzo: riguarda, rifai la registrazione o avvia il montaggio.
 export default function ReviewScreen({ project, onBack, onEdit }: {
@@ -34,16 +35,16 @@ export default function ReviewScreen({ project, onBack, onEdit }: {
       onEdit(next);
     } catch (e) {
       setUploadPct(null);
-      Alert.alert('Upload non riuscito', e instanceof Error ? e.message : 'Riprova.', [
+      Alert.alert(t('Upload non riuscito'), e instanceof Error ? tServer(e.message) : t('Riprova.'), [
         { text: 'OK' },
-        { text: 'Riprova', onPress: mount },
+        { text: t('Riprova'), onPress: mount },
       ]);
     }
   };
 
   return (
     <Screen>
-      <Header title="Rivedi il video" subtitle="Controlla che tutto sia a fuoco e si senta bene" onBack={onBack} />
+      <Header title={t('Rivedi il video')} subtitle={t('Controlla che tutto sia a fuoco e si senta bene')} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <View style={styles.playerWrap}>
           <VideoView player={player} style={styles.player} contentFit="contain" />
@@ -51,8 +52,8 @@ export default function ReviewScreen({ project, onBack, onEdit }: {
 
         {uploadPct === null ? (
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
-            <Btn label="Rifai" variant="ghost" icon={<RotateCcw size={17} color={colors.text} />} onPress={onBack} style={{ flex: 1 }} />
-            <Btn label="Monta il video" icon={<Film size={18} color={colors.onAccent} />} onPress={mount} style={{ flex: 1.6 }} />
+            <Btn label={t('Rifai')} variant="ghost" icon={<RotateCcw size={17} color={colors.text} />} onPress={onBack} style={{ flex: 1 }} />
+            <Btn label={t('Monta il video')} icon={<Film size={18} color={colors.onAccent} />} onPress={mount} style={{ flex: 1.6 }} />
           </View>
         ) : (
           <View style={{ marginTop: 26 }}>
